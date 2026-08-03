@@ -1,0 +1,9 @@
+cap-x-cache/
+capx-runs/
+*.log
+*.key
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+
