@@ -209,3 +209,8 @@ bash capx_scripts/run_capx_cube_stack.sh smoke
 capx_scripts/README_CAPX_CN.md
 ```
 
+CaP 与触觉记忆结合的设计说明见：
+
+```text
+README_TACTILE_CAP_CN.md
+```
