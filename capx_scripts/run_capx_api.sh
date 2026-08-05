@@ -61,10 +61,11 @@ unset _openrouter_key OPENROUTER_API_KEY
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "${CAPX_RUN_ROOT}"
 LOG_FILE="${CAPX_RUN_ROOT}/openrouter_proxy_${timestamp}.log"
+LOCAL_PROXY_SERVER_URL="http://${CAPX_PROXY_HOST}:${CAPX_PROXY_PORT}/chat/completions"
 
 cd "${CAPX_DIR}"
 echo "[capx-api] CAPX_DIR=${CAPX_DIR}"
-echo "[capx-api] endpoint=${CAPX_SERVER_URL}"
+echo "[capx-api] endpoint=${LOCAL_PROXY_SERVER_URL}"
 echo "[capx-api] log=${LOG_FILE}"
 echo "[capx-api] The key is temporary and will be deleted when this process exits."
 
@@ -76,4 +77,3 @@ status="${PIPESTATUS[0]}"
 set -e
 
 exit "${status}"
-

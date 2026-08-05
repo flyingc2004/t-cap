@@ -1,3 +1,3 @@
 [submodule "cap-x"]
 	path = cap-x
-	url = https://github.com/capgym/cap-x.git
+	url = git@github.com:flyingc2004/cap-x.git

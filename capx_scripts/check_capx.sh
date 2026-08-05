@@ -10,6 +10,10 @@ die() {
   exit 2
 }
 
+is_git_worktree() {
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 show_port() {
   local port="$1"
   local output=""
@@ -29,7 +33,7 @@ show_port() {
   fi
 }
 
-[[ -d "${CAPX_DIR}/.git" ]] || die "Repository not found: ${CAPX_DIR}"
+is_git_worktree "${CAPX_DIR}" || die "Repository not found: ${CAPX_DIR}"
 [[ -x "${CAPX_DIR}/.venv/bin/python" ]] || die "Virtual environment not found. Run setup_capx.sh first."
 [[ -f "${CAPX_DIR}/capx/envs/launch.py" ]] || die "Missing CaP-X launcher under ${CAPX_DIR}."
 [[ -f "${CAPX_DIR}/env_configs/cube_stack/franka_robosuite_cube_stack.yaml" ]] || die "Missing Cube Stack config."
@@ -67,7 +71,7 @@ print(f"[check-capx] visible GPU 0={torch.cuda.get_device_name(0)}")
 PY
 then
   echo "[check-capx] Dependency import failed. Repair with:" >&2
-  echo "  bash /mnt/a/ljz/tabero/capx_scripts/repair_capx_env.sh" >&2
+  echo "  bash ${SCRIPT_DIR}/repair_capx_env.sh" >&2
   exit 2
 fi
 

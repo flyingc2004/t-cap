@@ -3,7 +3,8 @@ capx-runs/
 *.log
 *.key
 .env
+.capx_secrets.env
+.capx_secrets.env.*
 .venv/
 __pycache__/
 .pytest_cache/
-

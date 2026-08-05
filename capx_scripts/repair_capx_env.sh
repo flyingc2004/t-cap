@@ -15,11 +15,15 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
-[[ -d "${CAPX_DIR}/.git" ]] || die "Repository not found: ${CAPX_DIR}"
+is_git_worktree() {
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+[[ -e "${CAPX_DIR}" ]] && is_git_worktree "${CAPX_DIR}" || die "Repository not found: ${CAPX_DIR}"
 [[ -f "${CAPX_DIR}/pyproject.toml" ]] || die "Missing pyproject.toml under ${CAPX_DIR}"
-[[ -d "${CAPX_DIR}/capx/third_party/robosuite/.git" ]] || die "Missing robosuite submodule. Rerun setup_capx.sh first."
-[[ -d "${CAPX_DIR}/capx/third_party/contact_graspnet_pytorch/.git" ]] || die "Missing contact_graspnet_pytorch submodule. Rerun setup_capx.sh first."
-[[ -d "${CAPX_DIR}/capx/third_party/sam3/.git" ]] || die "Missing sam3 submodule. Rerun setup_capx.sh first."
+is_git_worktree "${CAPX_DIR}/capx/third_party/robosuite" || die "Missing robosuite submodule. Rerun setup_capx.sh first."
+is_git_worktree "${CAPX_DIR}/capx/third_party/contact_graspnet_pytorch" || die "Missing contact_graspnet_pytorch submodule. Rerun setup_capx.sh first."
+is_git_worktree "${CAPX_DIR}/capx/third_party/sam3" || die "Missing sam3 submodule. Rerun setup_capx.sh first."
 
 require_command uv
 require_command nvidia-smi

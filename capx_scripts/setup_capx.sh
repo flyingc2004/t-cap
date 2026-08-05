@@ -24,6 +24,10 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
+is_git_worktree() {
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 retry() {
   local max_attempts="$1"
   shift
@@ -135,7 +139,7 @@ if [[ ! -e "${CAPX_DIR}" ]]; then
 
   echo "[setup-capx] Downloading the required Cube Stack submodules serially..."
   retry "${CAPX_GIT_RETRIES}" update_submodules || die "Submodule download failed after ${CAPX_GIT_RETRIES} attempts. Rerun this script to resume."
-elif [[ -d "${CAPX_DIR}/.git" ]]; then
+elif is_git_worktree "${CAPX_DIR}"; then
   echo "[setup-capx] Existing repository found; it will not be pulled or reset."
   if ! required_submodules_ready; then
     echo "[setup-capx] Initializing the required Cube Stack submodules serially..."

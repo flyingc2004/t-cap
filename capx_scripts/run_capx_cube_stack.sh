@@ -38,6 +38,17 @@ except OSError as exc:
 PY
 }
 
+is_local_endpoint() {
+  case "${CAPX_SERVER_URL}" in
+    http://127.0.0.1:*|http://localhost:*|https://127.0.0.1:*|https://localhost:*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 MODE="${1:-smoke}"
 case "${MODE}" in
   smoke)
@@ -61,6 +72,12 @@ WORKERS="${CAPX_WORKERS:-${default_workers}}"
 RECORD_VIDEO="${CAPX_RECORD_VIDEO:-${default_record_video}}"
 TEMPERATURE="${CAPX_TEMPERATURE:-1.0}"
 CONFIG_PATH="${CAPX_CONFIG_PATH:-env_configs/cube_stack/franka_robosuite_cube_stack.yaml}"
+CONFIG_PATH="${CONFIG_PATH/#\~/$HOME}"
+if [[ "${CONFIG_PATH}" = /* ]]; then
+  CONFIG_FILE="${CONFIG_PATH}"
+else
+  CONFIG_FILE="${CAPX_DIR}/${CONFIG_PATH}"
+fi
 
 is_positive_integer "${TRIALS}" || die "CAPX_TRIALS must be a positive integer."
 is_positive_integer "${WORKERS}" || die "CAPX_WORKERS must be a positive integer."
@@ -72,10 +89,27 @@ esac
 
 [[ -x "${CAPX_DIR}/.venv/bin/python" ]] || die "CaP-X is not installed. Run setup_capx.sh first."
 [[ -f "${CAPX_DIR}/capx/envs/launch.py" ]] || die "CaP-X launcher not found."
-[[ -f "${CAPX_DIR}/${CONFIG_PATH}" ]] || die "Config not found: ${CAPX_DIR}/${CONFIG_PATH}"
+[[ -f "${CONFIG_FILE}" ]] || die "Config not found: ${CONFIG_FILE}"
 
-if ! check_tcp_endpoint "${CAPX_PROXY_HOST}" "${CAPX_PROXY_PORT}"; then
-  die "The API proxy is not reachable at ${CAPX_PROXY_HOST}:${CAPX_PROXY_PORT}. Start run_capx_api.sh first."
+if is_local_endpoint; then
+  if ! check_tcp_endpoint "${CAPX_PROXY_HOST}" "${CAPX_PROXY_PORT}"; then
+    die "The API proxy is not reachable at ${CAPX_PROXY_HOST}:${CAPX_PROXY_PORT}. Start run_capx_api.sh first."
+  fi
+else
+  echo "[capx-eval] Using remote LLM endpoint: ${CAPX_SERVER_URL}"
+fi
+
+if [[ -z "${CAPX_API_KEY:-}" && ! is_local_endpoint ]]; then
+  if [[ -t 0 ]]; then
+    read -r -s -p "LLM API key (hidden; Enter only if the endpoint needs no key): " _capx_api_key
+    echo
+    if [[ -n "${_capx_api_key}" ]]; then
+      export CAPX_API_KEY="${_capx_api_key}"
+    fi
+    unset _capx_api_key
+  else
+    echo "[capx-eval] WARNING: CAPX_API_KEY is unset and no terminal is available for prompting." >&2
+  fi
 fi
 
 echo "[capx-eval] Perception port preflight:"
@@ -116,6 +150,7 @@ capx_commit=${commit}
 config_path=${CONFIG_PATH}
 model=${CAPX_MODEL}
 server_url=${CAPX_SERVER_URL}
+api_key_present=$([[ -n "${CAPX_API_KEY:-}" ]] && echo yes || echo no)
 temperature=${TEMPERATURE}
 trials=${TRIALS}
 workers=${WORKERS}
@@ -161,5 +196,5 @@ else
 fi
 
 unset HF_TOKEN
+unset CAPX_API_KEY
 exit "${status}"
-
