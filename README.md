@@ -14,7 +14,13 @@ t-cap/
 当前 `cap-x` 固定到：
 
 ```text
-53e9966d7a8e2fa7494676772bccc35280f5c0ed
+5e27ce93e68adc13e9cad00349a9246c7cdf4771
+```
+
+同时 `.gitmodules` 记录了 `cap-x` 开发分支：
+
+```text
+branch = feat/tac
 ```
 
 ## 1. 克隆仓库
@@ -22,7 +28,7 @@ t-cap/
 不要使用 `--recursive`，否则可能递归下载 CaP-X 的全部 third_party 子模块。先只初始化顶层 `cap-x` 子模块：
 
 ```bash
-git clone https://github.com/flyingc2004/t-cap.git
+git clone git@github.com:flyingc2004/t-cap.git
 cd t-cap
 git submodule update --init cap-x
 ```
@@ -33,6 +39,28 @@ git submodule update --init cap-x
 capx/third_party/robosuite
 capx/third_party/sam3
 capx/third_party/contact_graspnet_pytorch
+```
+
+如果希望把 `cap-x` 更新到 `.gitmodules` 中记录的 `feat/tac` 分支最新提交：
+
+```bash
+cd t-cap
+git submodule update --remote cap-x
+```
+
+注意：外层 `t-cap` 为了保证可复现，仍然记录 `cap-x` 的具体 commit。更新到最新 `cap-x/feat/tac` 后，如果要让别人 clone 时也拿到这个新版本，需要提交一次外层 submodule 指针：
+
+```bash
+git add cap-x
+git commit -m "Update cap-x submodule"
+git push
+```
+
+如果已经 clone 了仓库，想同步当前外层 `t-cap` 记录的精确 `cap-x` commit：
+
+```bash
+git pull
+git submodule update --init cap-x
 ```
 
 ## 2. 安装环境
