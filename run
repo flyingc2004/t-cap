@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${ROOT}/.capx_secrets.env}"
+if [[ -f "${CAPX_SECRET_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${CAPX_SECRET_ENV}"
+fi
+
+# Edit this block for normal use.
+MODE="${MODE:-smoke}"          # smoke or quick
+REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
+TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
+GPU="${GPU:-4}"                # physical GPU id; use 4/5/6/7 if free
+TEMPERATURE="${TEMPERATURE:-1.0}"
+MODEL="${MODEL:-${CAPX_MODEL:-qwen3.7-plus}}"
+RECORD_VIDEO="${RECORD_VIDEO:-True}"
+WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
+TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-180}"
+MAX_TRIAL_RETRIES="${MAX_TRIAL_RETRIES:-1}"
+PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-0}"  # 0 disables whole-run watchdog
+LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-300}"
+LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-20}"
+LLM_PREFLIGHT="${LLM_PREFLIGHT:-1}"
+MAX_TOKENS="${MAX_TOKENS:-4096}"
+
+# Default to UniVTAC's official grasp_classify protocol: reset/pre_move
+# pre-grasps the prism, then CaP-X classifies native tactile feedback and
+# places it. For the experimental full pick variant, set:
+# CONFIG_PATH=env_configs/univtac/grasp_classify_tactile.yaml
+CONFIG_PATH="${CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}"
+UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
+CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
+
+# If CAPX_SERVER_URL is already defined in .capx_secrets.env or your shell,
+# this value will not override it.
+CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-https://api.xty.app/v1}"
+if [[ -z "${CAPX_SERVER_URL:-}" ]]; then
+  CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/chat/completions"
+fi
+export CAPX_API_BASE_URL CAPX_SERVER_URL
+export CAPX_MODEL="${MODEL}"
+export LLM_PREFLIGHT_TIMEOUT_SECONDS
+RUN_ROOT="${RUN_ROOT:-${ROOT}/capx-runs}"
+
+case "${MODE}" in
+  smoke|quick) ;;
+  *) echo "Usage: edit MODE to smoke or quick" >&2; exit 2 ;;
+esac
+
+mkdir -p "${RUN_ROOT}"
+
+echo "[run] root=${ROOT}"
+echo "[run] mode=${MODE}, repeats=${REPEATS}, trials=${TRIALS}, gpu=${GPU}"
+echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, record_video=${RECORD_VIDEO}"
+echo "[run] config=${CONFIG_PATH}"
+echo "[run] trial_timeout_seconds=${TRIAL_TIMEOUT_SECONDS}, max_trial_retries=${MAX_TRIAL_RETRIES}"
+echo "[run] process_timeout_seconds=${PROCESS_TIMEOUT_SECONDS}, llm_timeout_seconds=${LLM_TIMEOUT_SECONDS}"
+echo "[run] server_url=${CAPX_SERVER_URL}, api_key_present=$([[ -n "${CAPX_API_KEY:-}" ]] && echo yes || echo no), max_tokens=${MAX_TOKENS}"
+
+if [[ "${LLM_PREFLIGHT}" == "1" ]]; then
+  echo "[run] llm preflight begin timeout=${LLM_PREFLIGHT_TIMEOUT_SECONDS}s"
+  python - <<'PY'
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+url = os.environ["CAPX_SERVER_URL"]
+model = os.environ["CAPX_MODEL"]
+timeout = float(os.environ.get("LLM_PREFLIGHT_TIMEOUT_SECONDS", "20"))
+api_key = os.environ.get("CAPX_API_KEY", "")
+payload = {
+    "model": model,
+    "messages": [{"role": "user", "content": "Reply with OK."}],
+    "temperature": 0,
+    "max_tokens": 8,
+    "stream": False,
+}
+headers = {"Content-Type": "application/json"}
+if api_key:
+    headers["Authorization"] = f"Bearer {api_key}"
+request = urllib.request.Request(
+    url,
+    data=json.dumps(payload).encode("utf-8"),
+    headers=headers,
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        text = response.read(500).decode("utf-8", errors="replace")
+        print(f"[run] llm preflight ok status={response.status} preview={text[:160]!r}")
+except urllib.error.HTTPError as exc:
+    text = exc.read(500).decode("utf-8", errors="replace")
+    print(f"[run] llm preflight failed status={exc.code} preview={text[:500]!r}", file=sys.stderr)
+    sys.exit(1)
+except Exception as exc:
+    print(f"[run] llm preflight failed error={exc!r}", file=sys.stderr)
+    sys.exit(1)
+PY
+fi
+
+for rep in $(seq 1 "${REPEATS}"); do
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  out="${RUN_ROOT}/univtac_grasp_classify_tactile_${MODE}_rep${rep}_${ts}"
+  log="${out}/run.log"
+  mkdir -p "${out}"
+  echo "[run] starting rep ${rep}/${REPEATS}: ${out}"
+
+  watchdog="${PROCESS_TIMEOUT_SECONDS}"
+  if [[ "${watchdog}" -le 0 ]]; then
+    if [[ "${MODE}" == "smoke" ]]; then
+      watchdog=420
+    else
+      watchdog=$((TRIALS * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
+    fi
+  fi
+  echo "[run] effective_process_timeout_seconds=${watchdog}"
+
+  cmd=(
+    bash "${ROOT}/capx_scripts/run_capx_univtac.sh" "${MODE}"
+  )
+  env_vars=(
+    "CAPX_GPU=${GPU}"
+    "CUDA_VISIBLE_DEVICES=${GPU}"
+    "UNIVTAC_DEVICE=cuda:0"
+    "UNIVTAC_ROOT=${UNIVTAC_ROOT}"
+    "CONDA_ENV_NAME=${CONDA_ENV_NAME}"
+    "CONDA_SH=${CONDA_SH}"
+    "HEADLESS=1"
+    "LIVESTREAM=0"
+    "OMNI_KIT_ACCEPT_EULA=YES"
+    "CAPX_CONFIG_PATH=${CONFIG_PATH}"
+    "CAPX_TRIALS=${TRIALS}"
+    "CAPX_WORKERS=${WORKERS}"
+    "CAPX_RECORD_VIDEO=${RECORD_VIDEO}"
+    "PYTHONUNBUFFERED=1"
+    "CAPX_TEMPERATURE=${TEMPERATURE}"
+    "CAPX_MODEL=${MODEL}"
+    "CAPX_LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS}"
+    "CAPX_MAX_TOKENS=${MAX_TOKENS}"
+    "CAPX_DISABLE_THINKING=${CAPX_DISABLE_THINKING:-1}"
+    "CAPX_FORCE_EXIT_AFTER_RUN=${CAPX_FORCE_EXIT_AFTER_RUN:-1}"
+    "CAPX_PRESERVE_OUTPUT_DIR=${CAPX_PRESERVE_OUTPUT_DIR:-1}"
+    "CAPX_TRIAL_TIMEOUT_SECONDS=${TRIAL_TIMEOUT_SECONDS}"
+    "CAPX_MAX_TRIAL_RETRIES=${MAX_TRIAL_RETRIES}"
+    "CAPX_API_BASE_URL=${CAPX_API_BASE_URL}"
+    "CAPX_SERVER_URL=${CAPX_SERVER_URL}"
+    "CAPX_API_KEY=${CAPX_API_KEY:-}"
+    "CAPX_OUTPUT_DIR=${out}"
+  )
+  set +e
+  env "${env_vars[@]}" timeout --kill-after=30s "${watchdog}s" "${cmd[@]}" 2>&1 | tee "${log}"
+  rc=${PIPESTATUS[0]}
+  set -e
+  echo "[run] rep ${rep} exit_code=${rc}, log=${log}"
+  if [[ "${rc}" -eq 124 || "${rc}" -eq 137 ]]; then
+    echo "[run] rep ${rep} hit process watchdog after ${watchdog}s" | tee -a "${log}"
+  elif [[ "${rc}" -ne 0 ]]; then
+    exit "${rc}"
+  fi
+done
+
+echo "[run] done"
