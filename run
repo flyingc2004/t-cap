@@ -17,13 +17,17 @@ TEMPERATURE="${TEMPERATURE:-1.0}"
 MODEL="${MODEL:-${CAPX_MODEL:-qwen3.7-plus}}"
 RECORD_VIDEO="${RECORD_VIDEO:-True}"
 WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
-TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-180}"
+TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-}"
 MAX_TRIAL_RETRIES="${MAX_TRIAL_RETRIES:-1}"
 PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-0}"  # 0 disables whole-run watchdog
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-300}"
 LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-20}"
 LLM_PREFLIGHT="${LLM_PREFLIGHT:-1}"
 MAX_TOKENS="${MAX_TOKENS:-4096}"
+PERCEPTION_GPU="${PERCEPTION_GPU:-${GPU}}"
+PERCEPTION_STARTUP_TIMEOUT_SECONDS="${PERCEPTION_STARTUP_TIMEOUT_SECONDS:-300}"
+CAPX_PYTHON="${CAPX_PYTHON:-${ROOT}/cap-x/.venv/bin/python}"
+CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/facebook/sam3/sam3.pt}"
 
 # Default to UniVTAC's official grasp_classify protocol: reset/pre_move
 # pre-grasps the prism, then CaP-X classifies native tactile feedback and
@@ -44,6 +48,28 @@ export CAPX_API_BASE_URL CAPX_SERVER_URL
 export CAPX_MODEL="${MODEL}"
 export LLM_PREFLIGHT_TIMEOUT_SECONDS
 RUN_ROOT="${RUN_ROOT:-${ROOT}/capx-runs}"
+if [[ "${CONFIG_PATH}" = /* ]]; then
+  CONFIG_FILE="${CONFIG_PATH}"
+else
+  CONFIG_FILE="${ROOT}/cap-x/${CONFIG_PATH}"
+fi
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+  echo "[run] config not found: ${CONFIG_FILE}" >&2
+  exit 2
+fi
+CONFIG_STEM="$(basename -- "${CONFIG_FILE%.*}")"
+RUN_LABEL="${RUN_LABEL:-${CONFIG_STEM}}"
+RGBD_PERCEPTION_REQUIRED=0
+if grep -Eq '^[[:space:]]*rgbd_perception_enabled:[[:space:]]*true([[:space:]]|$)' "${CONFIG_FILE}"; then
+  RGBD_PERCEPTION_REQUIRED=1
+fi
+if [[ -z "${TRIAL_TIMEOUT_SECONDS}" ]]; then
+  if [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
+    TRIAL_TIMEOUT_SECONDS=300
+  else
+    TRIAL_TIMEOUT_SECONDS=180
+  fi
+fi
 
 case "${MODE}" in
   smoke|quick) ;;
@@ -55,7 +81,7 @@ mkdir -p "${RUN_ROOT}"
 echo "[run] root=${ROOT}"
 echo "[run] mode=${MODE}, repeats=${REPEATS}, trials=${TRIALS}, gpu=${GPU}"
 echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, record_video=${RECORD_VIDEO}"
-echo "[run] config=${CONFIG_PATH}"
+echo "[run] config=${CONFIG_FILE}"
 echo "[run] trial_timeout_seconds=${TRIAL_TIMEOUT_SECONDS}, max_trial_retries=${MAX_TRIAL_RETRIES}"
 echo "[run] process_timeout_seconds=${PROCESS_TIMEOUT_SECONDS}, llm_timeout_seconds=${LLM_TIMEOUT_SECONDS}"
 echo "[run] server_url=${CAPX_SERVER_URL}, api_key_present=$([[ -n "${CAPX_API_KEY:-}" ]] && echo yes || echo no), max_tokens=${MAX_TOKENS}"
@@ -103,9 +129,144 @@ except Exception as exc:
 PY
 fi
 
+PERCEPTION_PIDS=()
+PERCEPTION_LOG_DIR=""
+
+service_ready() {
+  local port="$1"
+  local required_path="$2"
+  python - "${port}" "${required_path}" <<'PY' >/dev/null 2>&1
+import json
+import sys
+import urllib.request
+
+port = int(sys.argv[1])
+required_path = sys.argv[2]
+try:
+    with urllib.request.urlopen(
+        f"http://127.0.0.1:{port}/openapi.json", timeout=1.5
+    ) as response:
+        schema = json.load(response)
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if required_path in schema.get("paths", {}) else 1)
+PY
+}
+
+cleanup_perception_services() {
+  local pid
+  local attempt
+  for pid in "${PERCEPTION_PIDS[@]:-}"; do
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done
+  for attempt in $(seq 1 20); do
+    local any_alive=0
+    for pid in "${PERCEPTION_PIDS[@]:-}"; do
+      if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+        any_alive=1
+      fi
+    done
+    [[ "${any_alive}" == "0" ]] && break
+    sleep 0.25
+  done
+  for pid in "${PERCEPTION_PIDS[@]:-}"; do
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+      kill -KILL "${pid}" 2>/dev/null || true
+    fi
+    if [[ -n "${pid}" ]]; then
+      wait "${pid}" 2>/dev/null || true
+    fi
+  done
+}
+
+start_perception_service() {
+  local name="$1"
+  local port="$2"
+  local required_path="$3"
+  local module="$4"
+  shift 4
+  if service_ready "${port}" "${required_path}"; then
+    echo "[run] reusing ${name} service on 127.0.0.1:${port}"
+    return
+  fi
+  local log="${PERCEPTION_LOG_DIR}/${name}.log"
+  (
+    cd "${ROOT}/cap-x"
+    exec env \
+      CUDA_VISIBLE_DEVICES="${PERCEPTION_GPU}" \
+      CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT}" \
+      PYTHONUNBUFFERED=1 \
+      "${CAPX_PYTHON}" -m "${module}" \
+        --device cuda:0 --host 127.0.0.1 --port "${port}" "$@"
+  ) >"${log}" 2>&1 &
+  local pid=$!
+  PERCEPTION_PIDS+=("${pid}")
+  echo "[run] starting ${name} pid=${pid} port=${port} log=${log}"
+}
+
+wait_for_perception_service() {
+  local name="$1"
+  local port="$2"
+  local required_path="$3"
+  local deadline=$((SECONDS + PERCEPTION_STARTUP_TIMEOUT_SECONDS))
+  while ! service_ready "${port}" "${required_path}"; do
+    local pid
+    for pid in "${PERCEPTION_PIDS[@]:-}"; do
+      if [[ -n "${pid}" ]] && ! kill -0 "${pid}" 2>/dev/null; then
+        echo "[run] a perception service exited before ${name} became ready" >&2
+        tail -n 40 "${PERCEPTION_LOG_DIR}"/*.log >&2 2>/dev/null || true
+        return 1
+      fi
+    done
+    if (( SECONDS >= deadline )); then
+      echo "[run] ${name} did not become ready on port ${port}" >&2
+      tail -n 40 "${PERCEPTION_LOG_DIR}"/*.log >&2 2>/dev/null || true
+      return 1
+    fi
+    sleep 2
+  done
+  echo "[run] ${name} ready on 127.0.0.1:${port}"
+}
+
+if [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
+  if ! service_ready 8114 /segment || ! service_ready 8115 /plan; then
+    if [[ ! -x "${CAPX_PYTHON}" ]]; then
+      echo "[run] CaP-X Python is unavailable: ${CAPX_PYTHON}" >&2
+      exit 2
+    fi
+  fi
+  if ! service_ready 8114 /segment && [[ ! -f "${CAPX_SAM3_CHECKPOINT}" ]]; then
+    echo "[run] SAM3 checkpoint is unavailable: ${CAPX_SAM3_CHECKPOINT}" >&2
+    exit 2
+  fi
+  PERCEPTION_LOG_DIR="${RUN_ROOT}/perception_services_$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "${PERCEPTION_LOG_DIR}"
+  trap cleanup_perception_services EXIT
+  trap 'exit 130' INT TERM
+  echo "[run] perception_gpu=${PERCEPTION_GPU}, logs=${PERCEPTION_LOG_DIR}"
+  if [[ "${PERCEPTION_GPU}" == "${GPU}" ]]; then
+    echo "[run] warning: Isaac and perception services share physical GPU ${GPU}"
+  fi
+  start_perception_service \
+    sam3 8114 /segment capx.serving.launch_sam3_server \
+    --checkpoint-path "${CAPX_SAM3_CHECKPOINT}"
+  wait_for_perception_service sam3 8114 /segment
+  start_perception_service \
+    contact_graspnet 8115 /plan capx.serving.launch_contact_graspnet_server
+  wait_for_perception_service contact_graspnet 8115 /plan
+fi
+
 for rep in $(seq 1 "${REPEATS}"); do
+  if [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
+    if ! service_ready 8114 /segment || ! service_ready 8115 /plan; then
+      echo "[run] perception service became unavailable before rep ${rep}" >&2
+      exit 1
+    fi
+  fi
   ts="$(date -u +%Y%m%dT%H%M%SZ)"
-  out="${RUN_ROOT}/lift_can_tactile_${MODE}_rep${rep}_${ts}"
+  out="${RUN_ROOT}/${RUN_LABEL}_${MODE}_rep${rep}_${ts}"
   log="${out}/run.log"
   mkdir -p "${out}"
   echo "[run] starting rep ${rep}/${REPEATS}: ${out}"
@@ -113,7 +274,7 @@ for rep in $(seq 1 "${REPEATS}"); do
   watchdog="${PROCESS_TIMEOUT_SECONDS}"
   if [[ "${watchdog}" -le 0 ]]; then
     if [[ "${MODE}" == "smoke" ]]; then
-      watchdog=420
+      watchdog=$((TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180))
     else
       watchdog=$((TRIALS * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
     fi
