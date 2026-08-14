@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${ROOT}/.capx_secrets.env}"
+if [[ ! -f "${CAPX_SECRET_ENV}" && -f "/mnt/sdc/ljz/t-cap/.capx_secrets.env" ]]; then
+  CAPX_SECRET_ENV="/mnt/sdc/ljz/t-cap/.capx_secrets.env"
+fi
 if [[ -f "${CAPX_SECRET_ENV}" ]]; then
   # shellcheck disable=SC1090
   source "${CAPX_SECRET_ENV}"
@@ -12,6 +15,7 @@ fi
 MODE="${MODE:-smoke}"          # smoke or quick
 REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
 TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
+TRIAL_IDS="${TRIAL_IDS:-}"     # e.g. 8,13,20-25 to run selected seeds
 GPU="${GPU:-4}"                # physical GPU id; use 4/5/6/7 if free
 TEMPERATURE="${TEMPERATURE:-1.0}"
 MODEL="${MODEL:-${CAPX_MODEL:-qwen3.7-plus}}"
@@ -19,15 +23,20 @@ RECORD_VIDEO="${RECORD_VIDEO:-True}"
 WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
 TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-}"
 MAX_TRIAL_RETRIES="${MAX_TRIAL_RETRIES:-1}"
-PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-0}"  # 0 disables whole-run watchdog
+PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-0}"  # 0 uses an auto whole-run watchdog
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-300}"
 LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-20}"
 LLM_PREFLIGHT="${LLM_PREFLIGHT:-1}"
 MAX_TOKENS="${MAX_TOKENS:-4096}"
 PERCEPTION_GPU="${PERCEPTION_GPU:-${GPU}}"
 PERCEPTION_STARTUP_TIMEOUT_SECONDS="${PERCEPTION_STARTUP_TIMEOUT_SECONDS:-300}"
-CAPX_PYTHON="${CAPX_PYTHON:-${ROOT}/cap-x/.venv/bin/python}"
-CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/facebook/sam3/sam3.pt}"
+CAPX_RUNTIME_ROOT="${CAPX_RUNTIME_ROOT:-${ROOT}}"
+if [[ ! -x "${CAPX_RUNTIME_ROOT}/cap-x/.venv/bin/python" && -x "/mnt/sdc/ljz/t-cap/cap-x/.venv/bin/python" ]]; then
+  CAPX_RUNTIME_ROOT="/mnt/sdc/ljz/t-cap"
+fi
+CAPX_PYTHON="${CAPX_PYTHON:-${CAPX_RUNTIME_ROOT}/cap-x/.venv/bin/python}"
+CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${CAPX_RUNTIME_ROOT}/cap-x-cache/modelscope/facebook/sam3/sam3.pt}"
+CAPX_CONTACT_GRASPNET_ROOT="${CAPX_CONTACT_GRASPNET_ROOT:-${CAPX_RUNTIME_ROOT}/cap-x/capx/third_party/contact_graspnet_pytorch}"
 
 # Default to UniVTAC's official grasp_classify protocol: reset/pre_move
 # pre-grasps the prism, then CaP-X classifies native tactile feedback and
@@ -37,6 +46,11 @@ CONFIG_PATH="${CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.
 UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
+UNIVTAC_TMPDIR="${UNIVTAC_TMPDIR:-${UNIVTAC_ROOT}/.tmp}"
+mkdir -p "${UNIVTAC_TMPDIR}"
+export TMPDIR="${TMPDIR:-${UNIVTAC_TMPDIR}}"
+export TMP="${TMP:-${TMPDIR}}"
+export TEMP="${TEMP:-${TMPDIR}}"
 
 # If CAPX_SERVER_URL is already defined in .capx_secrets.env or your shell,
 # this value will not override it.
@@ -45,6 +59,7 @@ if [[ -z "${CAPX_SERVER_URL:-}" ]]; then
   CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/chat/completions"
 fi
 export CAPX_API_BASE_URL CAPX_SERVER_URL
+export CAPX_CONTACT_GRASPNET_ROOT
 export CAPX_MODEL="${MODEL}"
 export LLM_PREFLIGHT_TIMEOUT_SECONDS
 RUN_ROOT="${RUN_ROOT:-${ROOT}/capx-runs}"
@@ -64,7 +79,24 @@ if grep -Eq '^[[:space:]]*rgbd_perception_enabled:[[:space:]]*true([[:space:]]|$
   RGBD_PERCEPTION_REQUIRED=1
 fi
 if [[ -z "${TRIAL_TIMEOUT_SECONDS}" ]]; then
-  if [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
+  CONFIG_TRIAL_TIMEOUT_SECONDS="$(
+    python - "${CONFIG_FILE}" <<'PY'
+import math
+import re
+import sys
+
+pattern = re.compile(r"^\s*trial_timeout_seconds\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*(?:#.*)?$")
+with open(sys.argv[1], encoding="utf-8") as handle:
+    for line in handle:
+        match = pattern.match(line)
+        if match:
+            print(int(math.ceil(float(match.group(1)))))
+            break
+PY
+  )"
+  if [[ -n "${CONFIG_TRIAL_TIMEOUT_SECONDS}" ]]; then
+    TRIAL_TIMEOUT_SECONDS="${CONFIG_TRIAL_TIMEOUT_SECONDS}"
+  elif [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
     TRIAL_TIMEOUT_SECONDS=300
   else
     TRIAL_TIMEOUT_SECONDS=180
@@ -76,15 +108,57 @@ case "${MODE}" in
   *) echo "Usage: edit MODE to smoke or quick" >&2; exit 2 ;;
 esac
 
+count_trial_ids() {
+  local raw="${1//[[:space:]]/}"
+  local count=0
+  local part
+  local start
+  local end
+  local -a parts
+  IFS=',' read -r -a parts <<< "${raw}"
+  for part in "${parts[@]}"; do
+    [[ -z "${part}" ]] && continue
+    if [[ "${part}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      start="${BASH_REMATCH[1]}"
+      end="${BASH_REMATCH[2]}"
+      if (( end < start )); then
+        echo "[run] invalid TRIAL_IDS range: ${part}" >&2
+        return 2
+      fi
+      count=$((count + end - start + 1))
+    elif [[ "${part}" =~ ^[0-9]+$ ]]; then
+      count=$((count + 1))
+    else
+      echo "[run] invalid TRIAL_IDS entry: ${part}" >&2
+      return 2
+    fi
+  done
+  echo "${count}"
+}
+
+EFFECTIVE_TRIALS_FOR_WATCHDOG="${TRIALS}"
+if [[ -n "${TRIAL_IDS}" ]]; then
+  EFFECTIVE_TRIALS_FOR_WATCHDOG="$(count_trial_ids "${TRIAL_IDS}")"
+  if [[ "${EFFECTIVE_TRIALS_FOR_WATCHDOG}" -le 0 ]]; then
+    echo "[run] TRIAL_IDS did not contain any trial id: ${TRIAL_IDS}" >&2
+    exit 2
+  fi
+fi
+
 mkdir -p "${RUN_ROOT}"
 
 echo "[run] root=${ROOT}"
 echo "[run] mode=${MODE}, repeats=${REPEATS}, trials=${TRIALS}, gpu=${GPU}"
+if [[ -n "${TRIAL_IDS}" ]]; then
+  echo "[run] trial_ids=${TRIAL_IDS}"
+fi
+echo "[run] effective_trials_for_watchdog=${EFFECTIVE_TRIALS_FOR_WATCHDOG}"
 echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, record_video=${RECORD_VIDEO}"
 echo "[run] config=${CONFIG_FILE}"
 echo "[run] trial_timeout_seconds=${TRIAL_TIMEOUT_SECONDS}, max_trial_retries=${MAX_TRIAL_RETRIES}"
 echo "[run] process_timeout_seconds=${PROCESS_TIMEOUT_SECONDS}, llm_timeout_seconds=${LLM_TIMEOUT_SECONDS}"
 echo "[run] server_url=${CAPX_SERVER_URL}, api_key_present=$([[ -n "${CAPX_API_KEY:-}" ]] && echo yes || echo no), max_tokens=${MAX_TOKENS}"
+echo "[run] tmpdir=${TMPDIR}"
 
 if [[ "${LLM_PREFLIGHT}" == "1" ]]; then
   echo "[run] llm preflight begin timeout=${LLM_PREFLIGHT_TIMEOUT_SECONDS}s"
@@ -197,6 +271,7 @@ start_perception_service() {
     exec env \
       CUDA_VISIBLE_DEVICES="${PERCEPTION_GPU}" \
       CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT}" \
+      CAPX_CONTACT_GRASPNET_ROOT="${CAPX_CONTACT_GRASPNET_ROOT}" \
       PYTHONUNBUFFERED=1 \
       "${CAPX_PYTHON}" -m "${module}" \
         --device cuda:0 --host 127.0.0.1 --port "${port}" "$@"
@@ -241,6 +316,10 @@ if [[ "${RGBD_PERCEPTION_REQUIRED}" == "1" ]]; then
     echo "[run] SAM3 checkpoint is unavailable: ${CAPX_SAM3_CHECKPOINT}" >&2
     exit 2
   fi
+  if ! service_ready 8115 /plan && [[ ! -f "${CAPX_CONTACT_GRASPNET_ROOT}/checkpoints/contact_graspnet/config.yaml" ]]; then
+    echo "[run] Contact-GraspNet checkpoint config is unavailable: ${CAPX_CONTACT_GRASPNET_ROOT}/checkpoints/contact_graspnet/config.yaml" >&2
+    exit 2
+  fi
   PERCEPTION_LOG_DIR="${RUN_ROOT}/perception_services_$(date -u +%Y%m%dT%H%M%SZ)"
   mkdir -p "${PERCEPTION_LOG_DIR}"
   trap cleanup_perception_services EXIT
@@ -274,9 +353,9 @@ for rep in $(seq 1 "${REPEATS}"); do
   watchdog="${PROCESS_TIMEOUT_SECONDS}"
   if [[ "${watchdog}" -le 0 ]]; then
     if [[ "${MODE}" == "smoke" ]]; then
-      watchdog=$((TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180))
+      watchdog=$((EFFECTIVE_TRIALS_FOR_WATCHDOG * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
     else
-      watchdog=$((TRIALS * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
+      watchdog=$((EFFECTIVE_TRIALS_FOR_WATCHDOG * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
     fi
   fi
   echo "[run] effective_process_timeout_seconds=${watchdog}"
@@ -296,6 +375,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "OMNI_KIT_ACCEPT_EULA=YES"
     "CAPX_CONFIG_PATH=${CONFIG_PATH}"
     "CAPX_TRIALS=${TRIALS}"
+    "CAPX_TRIAL_IDS=${TRIAL_IDS}"
     "CAPX_WORKERS=${WORKERS}"
     "CAPX_RECORD_VIDEO=${RECORD_VIDEO}"
     "PYTHONUNBUFFERED=1"

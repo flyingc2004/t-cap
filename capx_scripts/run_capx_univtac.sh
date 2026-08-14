@@ -17,6 +17,9 @@ case "${MODE}" in
 esac
 shift || true
 EXTRA_ARGS=("$@")
+if [[ -n "${CAPX_TRIAL_IDS:-}" ]]; then
+  EXTRA_ARGS+=(--trial-ids "${CAPX_TRIAL_IDS}")
+fi
 
 CONFIG_PATH="${CAPX_CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}"
 if [[ "${CONFIG_PATH}" = /* ]]; then
@@ -57,8 +60,11 @@ export HOME="${UNIVTAC_HOME:-${UNIVTAC_ROOT}/.home}"
 export XDG_CACHE_HOME="${UNIVTAC_XDG_CACHE_HOME:-${UNIVTAC_ROOT}/.cache}"
 export XDG_DATA_HOME="${UNIVTAC_XDG_DATA_HOME:-${UNIVTAC_ROOT}/.local/share}"
 export XDG_CONFIG_HOME="${UNIVTAC_XDG_CONFIG_HOME:-${UNIVTAC_ROOT}/.config}"
-mkdir -p "${HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}" "${XDG_CONFIG_HOME}"
-echo "[capx-univtac] cuda_home=${CUDA_HOME}, home=${HOME}"
+export TMPDIR="${TMPDIR:-${UNIVTAC_TMPDIR:-${UNIVTAC_ROOT}/.tmp}}"
+export TMP="${TMP:-${TMPDIR}}"
+export TEMP="${TEMP:-${TMPDIR}}"
+mkdir -p "${HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}" "${XDG_CONFIG_HOME}" "${TMPDIR}"
+echo "[capx-univtac] cuda_home=${CUDA_HOME}, home=${HOME}, tmpdir=${TMPDIR}"
 
 cd "${UNIVTAC_ROOT}"
 
