@@ -7,19 +7,26 @@ if [[ -f "${CAPX_SECRET_ENV}" ]]; then
   # shellcheck disable=SC1090
   source "${CAPX_SECRET_ENV}"
 fi
+CAPX_DISABLE_PROXY="${CAPX_DISABLE_PROXY:-0}"
+if [[ "${CAPX_DISABLE_PROXY}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+  unset HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY
+  unset http_proxy https_proxy all_proxy no_proxy
+  export CAPX_LLM_TRUST_ENV=0
+  echo "[run] proxy disabled for LLM/API requests"
+fi
 
 # Edit this block for normal use.
 MODE="${MODE:-smoke}"          # smoke or quick
 REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
 TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
-GPU="${GPU:-4}"                # physical GPU id; use 4/5/6/7 if free
+GPU="${GPU:-7}"                # physical GPU id; use 4/5/6/7 if free
 TEMPERATURE="${TEMPERATURE:-1.0}"
-MODEL="${MODEL:-${CAPX_MODEL:-qwen3.7-plus}}"
+MODEL="${MODEL:-${CAPX_MODEL:-qwen3.8-max}}"
 RECORD_VIDEO="${RECORD_VIDEO:-True}"
 WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
-TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-}"
+TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-900}"
 MAX_TRIAL_RETRIES="${MAX_TRIAL_RETRIES:-1}"
-PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-0}"  # 0 disables whole-run watchdog
+PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-1800}"  # 0 disables whole-run watchdog
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-300}"
 LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-20}"
 LLM_PREFLIGHT="${LLM_PREFLIGHT:-1}"
@@ -33,7 +40,7 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # pre-grasps the prism, then CaP-X classifies native tactile feedback and
 # places it. For the experimental full pick variant, set:
 # CONFIG_PATH=env_configs/univtac/grasp_classify_tactile.yaml
-CONFIG_PATH="${CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}"
+CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}}"
 UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"

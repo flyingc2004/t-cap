@@ -26,8 +26,12 @@ export CAPX_SAM3_DIR="${CAPX_SAM3_DIR:-${MODELSCOPE_CACHE}/facebook/sam3}"
 export CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${CAPX_SAM3_DIR}/sam3.pt}"
 export TMPDIR="${TMPDIR:-/dev/shm/${USER:-$(id -un)}/capx-tmp}"
 
-export CAPX_GPU="${CAPX_GPU:-7}"
-export CUDA_VISIBLE_DEVICES="${CAPX_GPU}"
+if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+  export CAPX_GPU="${CUDA_VISIBLE_DEVICES%%,*}"
+else
+  export CAPX_GPU="${CAPX_GPU:-7}"
+  export CUDA_VISIBLE_DEVICES="${CAPX_GPU}"
+fi
 export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-0}"
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
