@@ -21,7 +21,9 @@ REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
 TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
 GPU="${GPU:-7}"                # physical GPU id; use 4/5/6/7 if free
 TEMPERATURE="${TEMPERATURE:-1.0}"
-MODEL="${MODEL:-${CAPX_MODEL:-qwen3.8-max-0902}}"
+# Keep the runnable default independent of a legacy CAPX_MODEL in secrets.
+# Set MODEL explicitly to override this for a one-off run.
+MODEL="${MODEL:-glm-5.3}"
 RECORD_VIDEO="${RECORD_VIDEO:-True}"
 WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
 TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-900}"
@@ -47,7 +49,7 @@ CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
 
 # If CAPX_SERVER_URL is already defined in .capx_secrets.env or your shell,
 # this value will not override it.
-CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-https://api.xty.app/v1}"
+CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-https://llm-ejq6ku0w1n2yvtv5.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
 if [[ -z "${CAPX_SERVER_URL:-}" ]]; then
   CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/chat/completions"
 fi
