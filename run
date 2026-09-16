@@ -57,6 +57,7 @@ export CAPX_API_BASE_URL CAPX_SERVER_URL
 export CAPX_MODEL="${MODEL}"
 export LLM_PREFLIGHT_TIMEOUT_SECONDS
 RUN_ROOT="${RUN_ROOT:-${ROOT}/capx-runs}"
+CAPX_LIVE_PREVIEW_PATH="${CAPX_LIVE_PREVIEW_PATH:-${RUN_ROOT}/latest_preview.jpg}"
 if [[ "${CONFIG_PATH}" = /* ]]; then
   CONFIG_FILE="${CONFIG_PATH}"
 else
@@ -321,6 +322,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_SERVER_URL=${CAPX_SERVER_URL}"
     "CAPX_API_KEY=${CAPX_API_KEY:-}"
     "CAPX_OUTPUT_DIR=${out}"
+    "CAPX_LIVE_PREVIEW_PATH=${CAPX_LIVE_PREVIEW_PATH}"
   )
   set +e
   # Keep the child in the foreground so Ctrl-C reaches CaP-X, which flushes
