@@ -1,0 +1,250 @@
+{
+  "schema_version": "tactile_probe_scaler.v0",
+  "scope": "provisional_task_protocol_local",
+  "protocol": "tactile_probe.v3",
+  "episode_count": 32,
+  "object_vector_count_per_family": 96,
+  "families": {
+    "preload_depth_2d": {
+      "section": "preload",
+      "field": "depth_mm",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          6.162599611282349,
+          6.4544183731079094
+        ],
+        "iqr": [
+          0.302440094947813,
+          0.3020467758178702
+        ]
+      }
+    },
+    "preload_marker_displacement_2d": {
+      "section": "preload",
+      "field": "marker_displacement_px",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          30.652100304070927,
+          69.65398899973346
+        ],
+        "iqr": [
+          1.5341645628005907,
+          0.9820753223333867
+        ]
+      }
+    },
+    "preload_marker_coherence_2d": {
+      "section": "preload",
+      "field": "marker_coherence",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          0.24618210521847983,
+          0.2560087075861315
+        ],
+        "iqr": [
+          0.05835918045660299,
+          0.022131638554820254
+        ]
+      }
+    },
+    "lift_depth_delta_2d": {
+      "section": "lift_minus_preload",
+      "field": "depth_mm",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          -0.0001726150512677549,
+          0.0001565933227531957
+        ],
+        "iqr": [
+          0.00744793415069811,
+          0.0039291381835964145
+        ]
+      }
+    },
+    "lift_marker_displacement_delta_2d": {
+      "section": "lift_minus_preload",
+      "field": "marker_displacement_px",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          -0.0038497143392604016,
+          0.009644582214392017
+        ],
+        "iqr": [
+          0.02560601041793653,
+          0.035104122291151896
+        ]
+      }
+    },
+    "lift_marker_coherence_delta_2d": {
+      "section": "lift_minus_preload",
+      "field": "marker_coherence",
+      "hands": [
+        "left",
+        "right"
+      ],
+      "scaler": {
+        "median": [
+          0.000220588614993536,
+          -0.0003251591443721863
+        ],
+        "iqr": [
+          0.0011518380247853774,
+          0.000706912058322802
+        ]
+      }
+    }
+  },
+  "diagnostics": {
+    "missing_valid_three_probe": 8
+  },
+  "accepted_episodes": [
+    {
+      "metadata": "pilot96_gpu0_00_h1_weight/metadata.json",
+      "seed": "3000"
+    },
+    {
+      "metadata": "pilot96_gpu0_00_h1_weight/metadata.json",
+      "seed": "3001"
+    },
+    {
+      "metadata": "pilot96_gpu0_00_h1_weight/metadata.json",
+      "seed": "3002"
+    },
+    {
+      "metadata": "pilot96_gpu0_00_h1_weight/metadata.json",
+      "seed": "3003"
+    },
+    {
+      "metadata": "pilot96_gpu0_01_h2_weight_roughness/metadata.json",
+      "seed": "3004"
+    },
+    {
+      "metadata": "pilot96_gpu0_01_h2_weight_roughness/metadata.json",
+      "seed": "3005"
+    },
+    {
+      "metadata": "pilot96_gpu0_01_h2_weight_roughness/metadata.json",
+      "seed": "3006"
+    },
+    {
+      "metadata": "pilot96_gpu0_01_h2_weight_roughness/metadata.json",
+      "seed": "3007"
+    },
+    {
+      "metadata": "pilot96_gpu0_02_h3_all/metadata.json",
+      "seed": "3009"
+    },
+    {
+      "metadata": "pilot96_gpu0_02_h3_all/metadata.json",
+      "seed": "3010"
+    },
+    {
+      "metadata": "pilot96_gpu0_02_h3_all/metadata.json",
+      "seed": "3011"
+    },
+    {
+      "metadata": "pilot96_gpu0_04_h2_weight_hardness/metadata.json",
+      "seed": "3016"
+    },
+    {
+      "metadata": "pilot96_gpu1_00_h1_roughness/metadata.json",
+      "seed": "3024"
+    },
+    {
+      "metadata": "pilot96_gpu1_00_h1_roughness/metadata.json",
+      "seed": "3025"
+    },
+    {
+      "metadata": "pilot96_gpu1_00_h1_roughness/metadata.json",
+      "seed": "3026"
+    },
+    {
+      "metadata": "pilot96_gpu1_00_h1_roughness/metadata.json",
+      "seed": "3027"
+    },
+    {
+      "metadata": "pilot96_gpu1_01_h2_weight_hardness/metadata.json",
+      "seed": "3028"
+    },
+    {
+      "metadata": "pilot96_gpu1_01_h2_weight_hardness/metadata.json",
+      "seed": "3029"
+    },
+    {
+      "metadata": "pilot96_gpu1_01_h2_weight_hardness/metadata.json",
+      "seed": "3030"
+    },
+    {
+      "metadata": "pilot96_gpu1_01_h2_weight_hardness/metadata.json",
+      "seed": "3031"
+    },
+    {
+      "metadata": "pilot96_gpu1_02_h3_all/metadata.json",
+      "seed": "3032"
+    },
+    {
+      "metadata": "pilot96_gpu1_02_h3_all/metadata.json",
+      "seed": "3033"
+    },
+    {
+      "metadata": "pilot96_gpu1_02_h3_all/metadata.json",
+      "seed": "3034"
+    },
+    {
+      "metadata": "pilot96_gpu1_02_h3_all/metadata.json",
+      "seed": "3035"
+    },
+    {
+      "metadata": "pilot96_gpu1_03_h1_hardness/metadata.json",
+      "seed": "3036"
+    },
+    {
+      "metadata": "pilot96_gpu1_03_h1_hardness/metadata.json",
+      "seed": "3037"
+    },
+    {
+      "metadata": "pilot96_gpu1_04_h2_weight_roughness/metadata.json",
+      "seed": "3040"
+    },
+    {
+      "metadata": "pilot96_gpu1_04_h2_weight_roughness/metadata.json",
+      "seed": "3041"
+    },
+    {
+      "metadata": "pilot96_gpu2_00_h1_weight/metadata.json",
+      "seed": "3048"
+    },
+    {
+      "metadata": "pilot96_gpu2_00_h1_weight/metadata.json",
+      "seed": "3049"
+    },
+    {
+      "metadata": "pilot96_gpu2_00_h1_weight/metadata.json",
+      "seed": "3050"
+    },
+    {
+      "metadata": "pilot96_gpu2_00_h1_weight/metadata.json",
+      "seed": "3051"
+    }
+  ]
+}
