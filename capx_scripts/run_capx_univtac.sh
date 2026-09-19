@@ -63,7 +63,7 @@ echo "[capx-univtac] cuda_home=${CUDA_HOME}, home=${HOME}"
 
 cd "${UNIVTAC_ROOT}"
 
-python "${CAPX_DIR}/capx/envs/launch_univtac.py" \
+exec python "${CAPX_DIR}/capx/envs/launch_univtac.py" \
   --config-path "${CONFIG_FILE}" \
   --total-trials "${TRIALS}" \
   --num-workers "${CAPX_WORKERS:-1}" \
