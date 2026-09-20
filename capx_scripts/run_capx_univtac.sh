@@ -73,5 +73,6 @@ exec python "${CAPX_DIR}/capx/envs/launch_univtac.py" \
   --server-url "${CAPX_SERVER_URL:-http://127.0.0.1:8110/chat/completions}" \
   --max-tokens "${CAPX_MAX_TOKENS:-4096}" \
   --temperature "${CAPX_TEMPERATURE:-1.0}" \
+  --reasoning-effort "${CAPX_REASONING_EFFORT:-medium}" \
   --univtac-device "${UNIVTAC_DEVICE}" \
   "${EXTRA_ARGS[@]}"

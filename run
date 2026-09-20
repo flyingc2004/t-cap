@@ -21,6 +21,7 @@ REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
 TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
 GPU="${GPU:-7}"                # physical GPU id; use 4/5/6/7 if free
 TEMPERATURE="${TEMPERATURE:-1.0}"
+REASONING_EFFORT="${REASONING_EFFORT:-medium}"
 # Keep the runnable default independent of a legacy CAPX_MODEL in secrets.
 # Set MODEL explicitly to override this for a one-off run.
 MODEL="${MODEL:-glm-5.3}"
@@ -90,7 +91,7 @@ mkdir -p "${RUN_ROOT}"
 
 echo "[run] root=${ROOT}"
 echo "[run] mode=${MODE}, repeats=${REPEATS}, trials=${TRIALS}, gpu=${GPU}"
-echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, record_video=${RECORD_VIDEO}"
+echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, reasoning_effort=${REASONING_EFFORT}, record_video=${RECORD_VIDEO}"
 echo "[run] config=${CONFIG_FILE}"
 echo "[run] trial_timeout_seconds=${TRIAL_TIMEOUT_SECONDS}, max_trial_retries=${MAX_TRIAL_RETRIES}"
 echo "[run] process_timeout_seconds=${PROCESS_TIMEOUT_SECONDS}, llm_timeout_seconds=${LLM_TIMEOUT_SECONDS}"
@@ -310,6 +311,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_RECORD_VIDEO=${RECORD_VIDEO}"
     "PYTHONUNBUFFERED=1"
     "CAPX_TEMPERATURE=${TEMPERATURE}"
+    "CAPX_REASONING_EFFORT=${REASONING_EFFORT}"
     "CAPX_MODEL=${MODEL}"
     "CAPX_LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS}"
     "CAPX_MAX_TOKENS=${MAX_TOKENS}"
