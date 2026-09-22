@@ -21,10 +21,17 @@ REPEATS="${REPEATS:-1}"        # use 3 for 3 x 10 trials
 TRIALS="${TRIALS:-1}"          # use 10 for each quick batch
 GPU="${GPU:-7}"                # physical GPU id; use 4/5/6/7 if free
 TEMPERATURE="${TEMPERATURE:-1.0}"
-REASONING_EFFORT="${REASONING_EFFORT:-medium}"
 # Keep the runnable default independent of a legacy CAPX_MODEL in secrets.
 # Set MODEL explicitly to override this for a one-off run.
 MODEL="${MODEL:-glm-5.3}"
+if [[ -z "${REASONING_EFFORT+x}" ]]; then
+  if [[ "${MODEL,,}" == *"kimi-k3"* ]]; then
+    REASONING_EFFORT="high"
+  else
+    REASONING_EFFORT="medium"
+  fi
+fi
+REASONING_EFFORT="${REASONING_EFFORT}"
 RECORD_VIDEO="${RECORD_VIDEO:-True}"
 WORKERS="${WORKERS:-1}"        # keep 1 for Isaac/UniVTAC
 TRIAL_TIMEOUT_SECONDS="${TRIAL_TIMEOUT_SECONDS:-900}"
@@ -33,7 +40,21 @@ PROCESS_TIMEOUT_SECONDS="${PROCESS_TIMEOUT_SECONDS:-1800}"  # 0 disables whole-r
 LLM_TIMEOUT_SECONDS="${LLM_TIMEOUT_SECONDS:-300}"
 LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-20}"
 LLM_PREFLIGHT="${LLM_PREFLIGHT:-1}"
-MAX_TOKENS="${MAX_TOKENS:-4096}"
+if [[ -z "${MAX_TOKENS+x}" ]]; then
+  if [[ "${MODEL,,}" == *"kimi-k3"* ]]; then
+    # K3's visible code shares the completion budget with always-on reasoning.
+    MAX_TOKENS=16384
+  else
+    MAX_TOKENS=4096
+  fi
+fi
+MAX_TOKENS="${MAX_TOKENS}"
+CAPX_DISABLE_THINKING_VALUE="${CAPX_DISABLE_THINKING:-1}"
+if [[ "${MODEL,,}" == *"kimi-k3"* ]]; then
+  # Kimi K3 has always-on reasoning; enable_thinking=false is not part of
+  # its public request contract.
+  CAPX_DISABLE_THINKING_VALUE=0
+fi
 PERCEPTION_GPU="${PERCEPTION_GPU:-${GPU}}"
 PERCEPTION_STARTUP_TIMEOUT_SECONDS="${PERCEPTION_STARTUP_TIMEOUT_SECONDS:-300}"
 CAPX_PYTHON="${CAPX_PYTHON:-${ROOT}/cap-x/.venv/bin/python}"
@@ -117,6 +138,10 @@ payload = {
     "max_tokens": 8,
     "stream": False,
 }
+if model.lower().split("/")[-1].startswith("kimi-k3"):
+    # Kimi K3 always reasons. Use a bounded effort for a cheap connectivity
+    # check; the actual trial uses REASONING_EFFORT below.
+    payload["reasoning_effort"] = "low"
 headers = {"Content-Type": "application/json"}
 if api_key:
     headers["Authorization"] = f"Bearer {api_key}"
@@ -315,7 +340,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_MODEL=${MODEL}"
     "CAPX_LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS}"
     "CAPX_MAX_TOKENS=${MAX_TOKENS}"
-    "CAPX_DISABLE_THINKING=${CAPX_DISABLE_THINKING:-1}"
+    "CAPX_DISABLE_THINKING=${CAPX_DISABLE_THINKING_VALUE}"
     "CAPX_FORCE_EXIT_AFTER_RUN=${CAPX_FORCE_EXIT_AFTER_RUN:-1}"
     "CAPX_PRESERVE_OUTPUT_DIR=${CAPX_PRESERVE_OUTPUT_DIR:-1}"
     "CAPX_TRIAL_TIMEOUT_SECONDS=${TRIAL_TIMEOUT_SECONDS}"
