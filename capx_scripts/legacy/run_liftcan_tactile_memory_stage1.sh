@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 CAPX_DIR="${CAPX_DIR:-${ROOT}/cap-x}"
 CAPX_PYTHON="${CAPX_PYTHON:-${CAPX_DIR}/.venv/bin/python}"
 SOURCE_RUN="${SOURCE_RUN:-${ROOT}/capx-runs/lift_can_tactile_official_quick_rep1_20260811T171107Z}"
@@ -128,7 +128,7 @@ run_range() {
 run_validation() {
   run_range \
     "validation_candidate_memory" \
-    "env_configs/univtac/lift_can_tactile_minimal_memory_candidate.yaml" \
+    "env_configs/univtac/legacy/lift-can-memory-v1/lift_can_tactile_minimal_memory_candidate.yaml" \
     "${VALIDATION_START}" \
     "${VALIDATION_END}"
   promote_after_validation "${RUN_ROOT}/validation_candidate_memory_${VALIDATION_START}_${VALIDATION_END}"
@@ -139,10 +139,10 @@ run_eval() {
   local start
   local end
   local groups=(
-    "handcrafted:env_configs/univtac/lift_can_tactile_official.yaml"
-    "minimal:env_configs/univtac/lift_can_tactile_minimal.yaml"
-    "initial_memory:env_configs/univtac/lift_can_tactile_minimal_memory_initial.yaml"
-    "closed_loop_memory:env_configs/univtac/lift_can_tactile_minimal_memory_closed_loop.yaml"
+    "handcrafted:env_configs/univtac/legacy/lift-can-memory-v1/lift_can_tactile_official.yaml"
+    "minimal:env_configs/univtac/legacy/lift-can-memory-v1/lift_can_tactile_minimal.yaml"
+    "initial_memory:env_configs/univtac/legacy/lift-can-memory-v1/lift_can_tactile_minimal_memory_initial.yaml"
+    "closed_loop_memory:env_configs/univtac/legacy/lift-can-memory-v1/lift_can_tactile_minimal_memory_closed_loop.yaml"
   )
   for group in "${groups[@]}"; do
     local label="${group%%:*}"

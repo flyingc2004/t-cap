@@ -18,7 +18,7 @@ esac
 shift || true
 EXTRA_ARGS=("$@")
 
-CONFIG_PATH="${CAPX_CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}"
+CONFIG_PATH="${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}"
 if [[ "${CONFIG_PATH}" = /* ]]; then
   CONFIG_FILE="${CONFIG_PATH}"
 else

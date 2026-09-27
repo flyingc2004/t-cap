@@ -60,11 +60,10 @@ PERCEPTION_STARTUP_TIMEOUT_SECONDS="${PERCEPTION_STARTUP_TIMEOUT_SECONDS:-300}"
 CAPX_PYTHON="${CAPX_PYTHON:-${ROOT}/cap-x/.venv/bin/python}"
 CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/facebook/sam3/sam3.pt}"
 
-# Default to UniVTAC's official grasp_classify protocol: reset/pre_move
-# pre-grasps the prism, then CaP-X classifies native tactile feedback and
-# places it. For the experimental full pick variant, set:
-# CONFIG_PATH=env_configs/univtac/grasp_classify_tactile.yaml
-CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/grasp_classify_tactile_preplace.yaml}}"
+# Default to the current UniVTAC tactile-response selection smoke. It uses a
+# fixed composable pair and task-local public probe records. Override
+# CONFIG_PATH to run a baseline or an archived experiment explicitly.
+CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
 UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
