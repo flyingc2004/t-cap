@@ -68,7 +68,7 @@ exec python "${CAPX_DIR}/capx/envs/launch_univtac.py" \
   --total-trials "${TRIALS}" \
   --num-workers "${CAPX_WORKERS:-1}" \
   --record-video "${CAPX_RECORD_VIDEO:-False}" \
-  --output-dir "${CAPX_OUTPUT_DIR:-${CAPX_RUN_ROOT}/univtac_grasp_classify_tactile}" \
+  --output-dir "${CAPX_OUTPUT_DIR:-${CAPX_RUN_ROOT}/univtac_tactile_response_selection}" \
   --model "${CAPX_MODEL:-gpt-4o}" \
   --server-url "${CAPX_SERVER_URL:-http://127.0.0.1:8110/chat/completions}" \
   --max-tokens "${CAPX_MAX_TOKENS:-4096}" \
