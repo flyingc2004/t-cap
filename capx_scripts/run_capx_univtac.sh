@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
+TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-}"
 export CAPX_ENV_AUTO_ACTIVATE=0
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/capx_env.sh"
@@ -29,7 +30,26 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   exit 2
 fi
 
-export PYTHONPATH="${CAPX_DIR}:${PYTHONPATH:-}"
+if [[ -z "${TACEX_RUNTIME_ROOT}" && "${UNIVTAC_ROOT}" == */ViTaForge_capx_tension ]]; then
+  TACEX_RUNTIME_ROOT="${UNIVTAC_ROOT}/third_party/TacEx"
+fi
+
+if [[ -n "${TACEX_RUNTIME_ROOT}" ]]; then
+  TACEX_RUNTIME_ROOT="$(cd "${TACEX_RUNTIME_ROOT}" && pwd)"
+  tacex_source_paths=()
+  for package in tacex tacex_uipc tacex_assets tacex_tasks; do
+    source_path="${TACEX_RUNTIME_ROOT}/source/${package}"
+    if [[ ! -d "${source_path}" ]]; then
+      echo "[capx-univtac] ERROR: TacEx source missing: ${source_path}" >&2
+      exit 2
+    fi
+    tacex_source_paths+=("${source_path}")
+  done
+  tacex_pythonpath="$(IFS=:; echo "${tacex_source_paths[*]}")"
+  export PYTHONPATH="${tacex_pythonpath}:${CAPX_DIR}:${PYTHONPATH:-}"
+else
+  export PYTHONPATH="${CAPX_DIR}:${PYTHONPATH:-}"
+fi
 export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 export CAPX_API_SERVER_PYTHON="${CAPX_API_SERVER_PYTHON:-${CAPX_PYTHON:-${CAPX_DIR}/.venv/bin/python}}"
 export HEADLESS="${HEADLESS:-1}"
@@ -40,6 +60,7 @@ export OMNI_KIT_ACCEPT_EULA="${OMNI_KIT_ACCEPT_EULA:-YES}"
 
 echo "[capx-univtac] config=${CONFIG_FILE}"
 echo "[capx-univtac] univtac_root=${UNIVTAC_ROOT}"
+echo "[capx-univtac] tacex_runtime_root=${TACEX_RUNTIME_ROOT:-<environment default>}"
 echo "[capx-univtac] mode=${MODE}, trials=${TRIALS}"
 echo "[capx-univtac] cuda_visible_devices=${CUDA_VISIBLE_DEVICES:-}, univtac_device=${UNIVTAC_DEVICE}"
 

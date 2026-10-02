@@ -7,6 +7,9 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # an explicit experiment model such as ``MODEL=kimi-k3 ./run``.
 CALLER_MODEL="${MODEL:-}"
 CALLER_CAPX_MODEL="${CAPX_MODEL:-}"
+CALLER_CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-}"
+CALLER_CAPX_SERVER_URL="${CAPX_SERVER_URL:-}"
+CALLER_CAPX_LLM_PROTOCOL="${CAPX_LLM_PROTOCOL:-}"
 CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${ROOT}/.capx_secrets.env}"
 if [[ -f "${CAPX_SECRET_ENV}" ]]; then
   # shellcheck disable=SC1090
@@ -16,6 +19,15 @@ if [[ -n "${CALLER_MODEL}" ]]; then
   MODEL="${CALLER_MODEL}"
 elif [[ -n "${CALLER_CAPX_MODEL}" ]]; then
   MODEL="${CALLER_CAPX_MODEL}"
+fi
+if [[ -n "${CALLER_CAPX_API_BASE_URL}" ]]; then
+  CAPX_API_BASE_URL="${CALLER_CAPX_API_BASE_URL}"
+fi
+if [[ -n "${CALLER_CAPX_SERVER_URL}" ]]; then
+  CAPX_SERVER_URL="${CALLER_CAPX_SERVER_URL}"
+fi
+if [[ -n "${CALLER_CAPX_LLM_PROTOCOL}" ]]; then
+  CAPX_LLM_PROTOCOL="${CALLER_CAPX_LLM_PROTOCOL}"
 fi
 CAPX_DISABLE_PROXY="${CAPX_DISABLE_PROXY:-0}"
 if [[ "${CAPX_DISABLE_PROXY}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
@@ -78,16 +90,22 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # CONFIG_PATH to run a baseline or an archived experiment explicitly.
 CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
 UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
+TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
 
 # If CAPX_SERVER_URL is already defined in .capx_secrets.env or your shell,
 # this value will not override it.
 CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-https://llm-ejq6ku0w1n2yvtv5.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
+CAPX_LLM_PROTOCOL="${CAPX_LLM_PROTOCOL:-chat_completions}"
 if [[ -z "${CAPX_SERVER_URL:-}" ]]; then
-  CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/chat/completions"
+  if [[ "${CAPX_LLM_PROTOCOL}" == "responses" ]]; then
+    CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/responses"
+  else
+    CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/chat/completions"
+  fi
 fi
-export CAPX_API_BASE_URL CAPX_SERVER_URL
+export CAPX_API_BASE_URL CAPX_SERVER_URL CAPX_LLM_PROTOCOL
 export CAPX_MODEL="${MODEL}"
 export LLM_PREFLIGHT_TIMEOUT_SECONDS
 RUN_ROOT="${RUN_ROOT:-${ROOT}/capx-runs}"
@@ -125,6 +143,7 @@ mkdir -p "${RUN_ROOT}"
 echo "[run] root=${ROOT}"
 echo "[run] mode=${MODE}, repeats=${REPEATS}, trials=${TRIALS}, gpu=${GPU}"
 echo "[run] model=${MODEL}, temperature=${TEMPERATURE}, reasoning_effort=${REASONING_EFFORT}, record_video=${RECORD_VIDEO}"
+echo "[run] llm_protocol=${CAPX_LLM_PROTOCOL}"
 echo "[run] config=${CONFIG_FILE}"
 echo "[run] trial_timeout_seconds=${TRIAL_TIMEOUT_SECONDS}, max_trial_retries=${MAX_TRIAL_RETRIES}"
 echo "[run] process_timeout_seconds=${PROCESS_TIMEOUT_SECONDS}, llm_timeout_seconds=${LLM_TIMEOUT_SECONDS}"
@@ -132,44 +151,60 @@ echo "[run] server_url=${CAPX_SERVER_URL}, api_key_present=$([[ -n "${CAPX_API_K
 
 if [[ "${LLM_PREFLIGHT}" == "1" ]]; then
   echo "[run] llm preflight begin timeout=${LLM_PREFLIGHT_TIMEOUT_SECONDS}s"
-  python - <<'PY'
+  "${CAPX_PYTHON}" - <<'PY'
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
+
+import requests
 
 url = os.environ["CAPX_SERVER_URL"]
 model = os.environ["CAPX_MODEL"]
 timeout = float(os.environ.get("LLM_PREFLIGHT_TIMEOUT_SECONDS", "20"))
 api_key = os.environ.get("CAPX_API_KEY", "")
-payload = {
-    "model": model,
-    "messages": [{"role": "user", "content": "Reply with OK."}],
-    "temperature": 0,
-    "max_tokens": 8,
-    "stream": False,
-}
-if model.lower().split("/")[-1].startswith("kimi-k3"):
+protocol = os.environ.get("CAPX_LLM_PROTOCOL", "chat_completions").strip().lower()
+if protocol == "responses":
+    payload = {
+        "model": model,
+        "input": "Reply with OK.",
+        "max_output_tokens": 8,
+    }
+else:
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "Reply with OK."}],
+        "temperature": 0,
+        "max_tokens": 8,
+        "stream": False,
+    }
+if protocol != "responses" and model.lower().split("/")[-1].startswith("kimi-k3"):
     # Kimi K3 always reasons. Use a bounded effort for a cheap connectivity
     # check; the actual trial uses REASONING_EFFORT below.
     payload["reasoning_effort"] = "low"
 headers = {"Content-Type": "application/json"}
 if api_key:
     headers["Authorization"] = f"Bearer {api_key}"
-request = urllib.request.Request(
-    url,
-    data=json.dumps(payload).encode("utf-8"),
-    headers=headers,
-    method="POST",
-)
+
+disable_proxy = os.environ.get("CAPX_DISABLE_PROXY", "").strip().lower() in {
+    "1", "true", "yes", "y", "on"
+}
 try:
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        text = response.read(500).decode("utf-8", errors="replace")
-        print(f"[run] llm preflight ok status={response.status} preview={text[:160]!r}")
-except urllib.error.HTTPError as exc:
-    text = exc.read(500).decode("utf-8", errors="replace")
-    print(f"[run] llm preflight failed status={exc.code} preview={text[:500]!r}", file=sys.stderr)
+    with requests.Session() as session:
+        session.trust_env = not disable_proxy
+        response = session.post(
+            url,
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=timeout,
+        )
+    text = response.text[:500]
+    response.raise_for_status()
+    print(f"[run] llm preflight ok status={response.status_code} preview={text[:160]!r}")
+except requests.HTTPError as exc:
+    response = exc.response
+    status = response.status_code if response is not None else "unknown"
+    text = response.text[:500] if response is not None else str(exc)
+    print(f"[run] llm preflight failed status={status} preview={text!r}", file=sys.stderr)
     sys.exit(1)
 except Exception as exc:
     print(f"[run] llm preflight failed error={exc!r}", file=sys.stderr)
@@ -337,6 +372,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CUDA_VISIBLE_DEVICES=${GPU}"
     "UNIVTAC_DEVICE=cuda:0"
     "UNIVTAC_ROOT=${UNIVTAC_ROOT}"
+    "TACEX_RUNTIME_ROOT=${TACEX_RUNTIME_ROOT}"
     "CONDA_ENV_NAME=${CONDA_ENV_NAME}"
     "CONDA_SH=${CONDA_SH}"
     "HEADLESS=1"
@@ -359,6 +395,7 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_MAX_TRIAL_RETRIES=${MAX_TRIAL_RETRIES}"
     "CAPX_API_BASE_URL=${CAPX_API_BASE_URL}"
     "CAPX_SERVER_URL=${CAPX_SERVER_URL}"
+    "CAPX_LLM_PROTOCOL=${CAPX_LLM_PROTOCOL}"
     "CAPX_API_KEY=${CAPX_API_KEY:-}"
     "CAPX_OUTPUT_DIR=${out}"
     "CAPX_LIVE_PREVIEW_PATH=${CAPX_LIVE_PREVIEW_PATH}"
@@ -366,7 +403,7 @@ for rep in $(seq 1 "${REPEATS}"); do
   set +e
   # Keep the child in the foreground so Ctrl-C reaches CaP-X, which flushes
   # buffered video/debug artifacts before returning exit status 130.
-  env "${env_vars[@]}" timeout --foreground --kill-after=30s "${watchdog}s" "${cmd[@]}" 2>&1 | tee "${log}"
+  env "${env_vars[@]}" timeout --foreground --signal=INT --kill-after=30s "${watchdog}s" "${cmd[@]}" 2>&1 | tee "${log}"
   rc=${PIPESTATUS[0]}
   set -e
   echo "[run] rep ${rep} exit_code=${rc}, log=${log}"

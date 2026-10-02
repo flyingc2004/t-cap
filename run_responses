@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Run CaP-X against an OpenAI Responses API provider without changing the
+# existing chat-completions launcher used by Kimi and older configurations.
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CALLER_CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-}"
+CALLER_CAPX_MODEL="${CAPX_MODEL:-}"
+CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${ROOT}/.capx_secrets.env}"
+
+if [[ -f "${CAPX_SECRET_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${CAPX_SECRET_ENV}"
+fi
+
+if [[ -n "${CALLER_CAPX_API_BASE_URL}" ]]; then
+  CAPX_API_BASE_URL="${CALLER_CAPX_API_BASE_URL}"
+fi
+if [[ -n "${CALLER_CAPX_MODEL}" ]]; then
+  CAPX_MODEL="${CALLER_CAPX_MODEL}"
+fi
+
+: "${CAPX_API_BASE_URL:?CAPX_API_BASE_URL must point to an OpenAI-compatible /v1 base URL}"
+: "${CAPX_MODEL:?CAPX_MODEL must name a Responses API model}"
+
+export CAPX_LLM_PROTOCOL=responses
+export CAPX_SERVER_URL="${CAPX_API_BASE_URL%/}/responses"
+export MODEL="${MODEL:-${CAPX_MODEL}}"
+
+# The configured relay has a 120-second origin-read window. Keep Responses
+# requests compact by default so a hidden reasoning pass cannot consume the
+# whole window. Experiments can still override either value explicitly.
+export MAX_TOKENS="${MAX_TOKENS:-2048}"
+export REASONING_EFFORT="${REASONING_EFFORT:-low}"
+export CAPX_RESPONSES_SEND_REASONING_EFFORT="${CAPX_RESPONSES_SEND_REASONING_EFFORT:-1}"
+
+# The relay is directly reachable from this server. Avoid inheriting an
+# unrelated shell proxy, and allow enough time for a small reasoning response
+# during preflight (gpt-6-sol can take more than the generic 20-second default).
+export CAPX_DISABLE_PROXY="${CAPX_DISABLE_PROXY:-1}"
+export LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-60}"
+
+exec "${ROOT}/run"
