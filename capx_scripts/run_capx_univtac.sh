@@ -30,7 +30,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   exit 2
 fi
 
-if [[ -z "${TACEX_RUNTIME_ROOT}" && "${UNIVTAC_ROOT}" == */ViTaForge_capx_tension ]]; then
+if [[ -z "${TACEX_RUNTIME_ROOT}" && -d "${UNIVTAC_ROOT}/third_party/TacEx/source" ]]; then
   TACEX_RUNTIME_ROOT="${UNIVTAC_ROOT}/third_party/TacEx"
 fi
 

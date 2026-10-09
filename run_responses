@@ -39,5 +39,7 @@ export CAPX_RESPONSES_SEND_REASONING_EFFORT="${CAPX_RESPONSES_SEND_REASONING_EFF
 # during preflight (gpt-6-sol can take more than the generic 20-second default).
 export CAPX_DISABLE_PROXY="${CAPX_DISABLE_PROXY:-1}"
 export LLM_PREFLIGHT_TIMEOUT_SECONDS="${LLM_PREFLIGHT_TIMEOUT_SECONDS:-60}"
+export RECORD_VIDEO="${RECORD_VIDEO:-True}"
 
+# Keep exec so ./run owns SIGINT and can finalize the trial video before exit.
 exec "${ROOT}/run"

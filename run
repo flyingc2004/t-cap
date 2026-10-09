@@ -355,14 +355,11 @@ for rep in $(seq 1 "${REPEATS}"); do
   echo "[run] starting rep ${rep}/${REPEATS}: ${out}"
 
   watchdog="${PROCESS_TIMEOUT_SECONDS}"
-  if [[ "${watchdog}" -le 0 ]]; then
-    if [[ "${MODE}" == "smoke" ]]; then
-      watchdog=$((TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180))
-    else
-      watchdog=$((TRIALS * (TRIAL_TIMEOUT_SECONDS + LLM_TIMEOUT_SECONDS + 180)))
-    fi
+  if [[ "${watchdog}" -gt 0 ]]; then
+    echo "[run] effective_process_timeout_seconds=${watchdog}"
+  else
+    echo "[run] process watchdog disabled"
   fi
-  echo "[run] effective_process_timeout_seconds=${watchdog}"
 
   cmd=(
     bash "${ROOT}/capx_scripts/run_capx_univtac.sh" "${MODE}"
@@ -401,12 +398,19 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_LIVE_PREVIEW_PATH=${CAPX_LIVE_PREVIEW_PATH}"
   )
   set +e
-  # Keep the child in the foreground so Ctrl-C reaches CaP-X, which flushes
-  # buffered video/debug artifacts before returning exit status 130.
-  env "${env_vars[@]}" timeout --foreground --signal=INT --kill-after=30s "${watchdog}s" "${cmd[@]}" 2>&1 | tee "${log}"
+  # Keep both the launcher and log reader alive while the Python child closes
+  # its MP4 writers. Without this, Ctrl-C can kill tee before the save logs
+  # (and the final video) are written.
+  interrupted=0
+  trap 'interrupted=1; echo "[run] Ctrl-C received; waiting for trial video save..." >&2' INT
+  env "${env_vars[@]}" timeout --foreground --signal=INT --kill-after=300s "${watchdog}s" "${cmd[@]}" 2>&1 | (trap '' INT; tee "${log}")
   rc=${PIPESTATUS[0]}
+  trap - INT
   set -e
   echo "[run] rep ${rep} exit_code=${rc}, log=${log}"
+  if [[ "${interrupted}" -eq 1 ]]; then
+    exit 130
+  fi
   if [[ "${rc}" -eq 124 || "${rc}" -eq 137 ]]; then
     echo "[run] rep ${rep} hit process watchdog after ${watchdog}s" | tee -a "${log}"
   elif [[ "${rc}" -ne 0 ]]; then
