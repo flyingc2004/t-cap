@@ -89,8 +89,16 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # fixed composable pair and task-local public probe records. Override
 # CONFIG_PATH to run a baseline or an archived experiment explicitly.
 CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
-UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
-TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-}"
+case "$(basename -- "${CONFIG_PATH}")" in
+  tension_strap_stage_memory_control.yaml|tension_strap_stage_memory_control_visual.yaml)
+    UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/OpenTacBench_capx}"
+    TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-${UNIVTAC_ROOT}/third_party/TacEx}"
+    ;;
+  *)
+    UNIVTAC_ROOT="${UNIVTAC_ROOT:-/mnt/sdc/ljz/UniVTAC}"
+    TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-}"
+    ;;
+esac
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-UniVTAC}"
 CONDA_SH="${CONDA_SH:-/mnt/sdc/ljz/miniforge3/etc/profile.d/conda.sh}"
 
