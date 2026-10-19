@@ -436,12 +436,13 @@ for rep in $(seq 1 "${REPEATS}"); do
   rc=${PIPESTATUS[0]}
   trap - INT
   set -e
-  echo "[run] rep ${rep} exit_code=${rc}, log=${log}"
+  echo "[run] rep ${rep} exit_code=${rc}, log=${log}" | tee -a "${log}"
   if [[ "${interrupted}" -eq 1 ]]; then
     exit 130
   fi
   if [[ "${rc}" -eq 124 || "${rc}" -eq 137 ]]; then
     echo "[run] rep ${rep} hit process watchdog after ${watchdog}s" | tee -a "${log}"
+    exit "${rc}"
   elif [[ "${rc}" -ne 0 ]]; then
     exit "${rc}"
   fi
