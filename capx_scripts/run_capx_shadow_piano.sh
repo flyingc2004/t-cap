@@ -26,11 +26,7 @@ if [[ "${CONFIG_PATH}" = /* ]]; then CONFIG_FILE="${CONFIG_PATH}"; else CONFIG_F
 [[ -f "${UNIVTAC_ROOT}/env/tasks/arm_shadow_piano.py" ]] || { echo "[capx-shadow] OpenTacBench Shadow task missing: ${UNIVTAC_ROOT}" >&2; exit 2; }
 [[ -x "${UNIVTAC_ROOT}/.cache/piano_tactile/digit/venv/bin/python" ]] || { echo "[capx-shadow] DIGIT renderer is not installed" >&2; exit 2; }
 
-TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-${UNIVTAC_ROOT}/third_party/TacEx}"
-for package in tacex tacex_uipc tacex_assets tacex_tasks; do
-  [[ -d "${TACEX_RUNTIME_ROOT}/source/${package}" ]] || { echo "[capx-shadow] bundled TacEx missing: ${package}" >&2; exit 2; }
-done
-export PYTHONPATH="${CAPX_DIR}:${UNIVTAC_ROOT}:${TACEX_RUNTIME_ROOT}/source/tacex:${TACEX_RUNTIME_ROOT}/source/tacex_uipc:${TACEX_RUNTIME_ROOT}/source/tacex_assets:${TACEX_RUNTIME_ROOT}/source/tacex_tasks:${PYTHONPATH:-}"
+export PYTHONPATH="${CAPX_DIR}:${UNIVTAC_ROOT}:${PYTHONPATH:-}"
 export PYTHONUNBUFFERED=1 HEADLESS=1 LIVESTREAM=0 OMNI_KIT_ACCEPT_EULA=YES
 export HOME="${UNIVTAC_HOME:-/mnt/data/ljz/opentacbench/kit-home}"
 export XDG_CACHE_HOME="${UNIVTAC_XDG_CACHE_HOME:-/mnt/data/ljz/opentacbench/kit-cache}"

@@ -94,11 +94,10 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # CONFIG_PATH to run a baseline or an archived experiment explicitly.
 CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
 case "$(basename -- "${CONFIG_PATH}")" in
-  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml)
+  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml|play_piano_shadow_digit_visual_force_60hz_smoke.yaml|play_piano_shadow_digit_visual_force_5d_60hz_smoke.yaml)
     [[ -n "${GPU_WAS_SET}" ]] || { echo "[run] Shadow piano requires an explicit GPU=<physical-id>" >&2; exit 2; }
     RUN_ROOT="${RUN_ROOT:-/mnt/data/ljz/opentacbench/capx-runs}"
     UNIVTAC_ROOT="${UNIVTAC_ROOT:-$(cd "${ROOT}/../OpenTacBench" && pwd)}"
-    TACEX_RUNTIME_ROOT="${TACEX_RUNTIME_ROOT:-${UNIVTAC_ROOT}/third_party/TacEx}"
     CONDA_SH="${CONDA_SH:-/mnt/a/ljz/miniconda/etc/profile.d/conda.sh}"
     CONDA_ENV_NAME="${CONDA_ENV_NAME:-/mnt/data/ljz/opentacbench/conda-envs/UniVTAC}"
     if [[ "${CAPX_PYTHON}" == "${ROOT}/cap-x/.venv/bin/python" && ! -x "${CAPX_PYTHON}" ]]; then
@@ -106,6 +105,10 @@ case "$(basename -- "${CONFIG_PATH}")" in
     fi
     [[ -n "${TRIAL_TIMEOUT_WAS_SET}" ]] || TRIAL_TIMEOUT_SECONDS=3600
     [[ -n "${PROCESS_TIMEOUT_WAS_SET}" ]] || PROCESS_TIMEOUT_SECONDS=5400
+    if [[ "$(basename -- "${CONFIG_PATH}")" == *"60hz_smoke.yaml" ]]; then
+      [[ -n "${TRIAL_TIMEOUT_WAS_SET}" ]] || TRIAL_TIMEOUT_SECONDS=7200
+      [[ -n "${PROCESS_TIMEOUT_WAS_SET}" ]] || PROCESS_TIMEOUT_SECONDS=7800
+    fi
     [[ -n "${MAX_TOKENS_WAS_SET}" ]] || MAX_TOKENS=8192
     ;;
   tension_strap_stage_memory_control.yaml|tension_strap_stage_memory_control_visual.yaml)
@@ -400,7 +403,6 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CUDA_VISIBLE_DEVICES=${GPU}"
     "UNIVTAC_DEVICE=cuda:0"
     "UNIVTAC_ROOT=${UNIVTAC_ROOT}"
-    "TACEX_RUNTIME_ROOT=${TACEX_RUNTIME_ROOT}"
     "CONDA_ENV_NAME=${CONDA_ENV_NAME}"
     "CONDA_SH=${CONDA_SH}"
     "HEADLESS=1"
@@ -428,6 +430,9 @@ for rep in $(seq 1 "${REPEATS}"); do
     "CAPX_OUTPUT_DIR=${out}"
     "CAPX_LIVE_PREVIEW_PATH=${CAPX_LIVE_PREVIEW_PATH}"
   )
+  if [[ "${shadow_task}" -eq 0 ]]; then
+    env_vars+=("TACEX_RUNTIME_ROOT=${TACEX_RUNTIME_ROOT}")
+  fi
   set +e
   # Keep both the launcher and log reader alive while the Python child closes
   # its MP4 writers. Without this, Ctrl-C can kill tee before the save logs
