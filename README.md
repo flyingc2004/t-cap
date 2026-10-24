@@ -1,6 +1,12 @@
 # T-CaP / CaP-X 最小复现脚本
 
-这个仓库用于在本机 8 卡 RTX 4090 服务器上复现 CaP-X 的 Robosuite Cube Stack 最小流程。仓库只保存可复现代码和脚本，不保存 Python 环境、缓存、模型权重、运行输出或 API token。
+这个仓库包含 CaP-X 复现脚本和 OpenTacBench 接入。仓库保存代码、配置、少量冻结触觉标定参数及评估结果；Python 环境、大模型权重、缓存、原始轨迹、运行输出和 API token 保留在数据盘。
+
+## OpenTacBench Shadow Hand 钢琴
+
+另一台服务器运行五维 DIGIT 力估计 smoke，请先阅读[当前进展与迁移运行文档](docs/shadow-piano-handoff.md)。文档包含已上传的五维模型／评估结果、匹配传感器配置、环境条件、路径设置、单 seed 命令和审计方式。
+
+钢琴代码使用父仓库记录的 cap-x commit；不要使用下方旧 Cube Stack 流程的 `submodule update --remote` 来选择钢琴版本。以下保留原 Cube Stack 复现说明。
 
 ## 仓库结构
 
@@ -11,10 +17,10 @@ t-cap/
   README.md              # 当前说明
 ```
 
-当前 `cap-x` 固定到：
+查看当前父仓库固定的 `cap-x` commit：
 
 ```text
-5e27ce93e68adc13e9cad00349a9246c7cdf4771
+git ls-tree HEAD cap-x
 ```
 
 同时 `.gitmodules` 记录了 `cap-x` 开发分支：
