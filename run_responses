@@ -4,6 +4,7 @@ set -Eeuo pipefail
 # Run CaP-X against an OpenAI Responses API provider without changing the
 # existing chat-completions launcher used by Kimi and older configurations.
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CALLER_MODEL="${MODEL:-}"
 CALLER_CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-}"
 CALLER_CAPX_MODEL="${CAPX_MODEL:-}"
 CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${ROOT}/.capx_secrets.env}"
@@ -18,6 +19,11 @@ if [[ -n "${CALLER_CAPX_API_BASE_URL}" ]]; then
 fi
 if [[ -n "${CALLER_CAPX_MODEL}" ]]; then
   CAPX_MODEL="${CALLER_CAPX_MODEL}"
+fi
+if [[ -n "${CALLER_MODEL}" ]]; then
+  MODEL="${CALLER_MODEL}"
+elif [[ -n "${CALLER_CAPX_MODEL}" ]]; then
+  MODEL="${CALLER_CAPX_MODEL}"
 fi
 
 : "${CAPX_API_BASE_URL:?CAPX_API_BASE_URL must point to an OpenAI-compatible /v1 base URL}"

@@ -10,10 +10,24 @@ export CAPX_CACHE_ROOT="${CAPX_CACHE_ROOT:-${TABERO_ROOT}/cap-x-cache}"
 export CAPX_RUN_ROOT="${CAPX_RUN_ROOT:-${TABERO_ROOT}/capx-runs}"
 
 export CAPX_SECRET_ENV="${CAPX_SECRET_ENV:-${TABERO_ROOT}/.capx_secrets.env}"
+_capx_requested_model="${CAPX_MODEL:-}"
+_capx_requested_base_url="${CAPX_API_BASE_URL:-}"
+_capx_requested_server_url="${CAPX_SERVER_URL:-}"
+_capx_requested_protocol="${CAPX_LLM_PROTOCOL:-}"
+_capx_requested_disable_proxy="${CAPX_DISABLE_PROXY:-}"
 if [[ -f "${CAPX_SECRET_ENV}" ]]; then
   # shellcheck disable=SC1090
   source "${CAPX_SECRET_ENV}"
 fi
+# Parent launchers already resolved explicit experiment overrides. Loading
+# credentials again must not replace that model or route with saved defaults.
+[[ -z "${_capx_requested_model}" ]] || export CAPX_MODEL="${_capx_requested_model}"
+[[ -z "${_capx_requested_base_url}" ]] || export CAPX_API_BASE_URL="${_capx_requested_base_url}"
+[[ -z "${_capx_requested_server_url}" ]] || export CAPX_SERVER_URL="${_capx_requested_server_url}"
+[[ -z "${_capx_requested_protocol}" ]] || export CAPX_LLM_PROTOCOL="${_capx_requested_protocol}"
+[[ -z "${_capx_requested_disable_proxy}" ]] || export CAPX_DISABLE_PROXY="${_capx_requested_disable_proxy}"
+unset _capx_requested_model _capx_requested_base_url _capx_requested_server_url
+unset _capx_requested_protocol _capx_requested_disable_proxy
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${CAPX_CACHE_ROOT}/uv}"
 export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-${CAPX_CACHE_ROOT}/python}"
@@ -45,16 +59,21 @@ export CAPX_PROXY_PORT="${CAPX_PROXY_PORT:-8110}"
 export CAPX_API_BASE_URL="${CAPX_API_BASE_URL:-https://api.xty.app/v1}"
 export CAPX_SERVER_URL="${CAPX_SERVER_URL:-${CAPX_API_BASE_URL%/}/chat/completions}"
 
-# Keep CaP-X's local API traffic away from an SSH-forwarded internet proxy.
-_capx_no_proxy="${NO_PROXY:-${no_proxy:-}}"
-for _capx_local_host in 127.0.0.1 localhost; do
-  if [[ ",${_capx_no_proxy}," != *",${_capx_local_host},"* ]]; then
-    _capx_no_proxy="${_capx_no_proxy:+${_capx_no_proxy},}${_capx_local_host}"
-  fi
-done
-export NO_PROXY="${_capx_no_proxy}"
-export no_proxy="${_capx_no_proxy}"
-unset _capx_no_proxy _capx_local_host
+if [[ "${CAPX_DISABLE_PROXY:-0}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+  unset HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy
+  export CAPX_LLM_TRUST_ENV=0
+else
+  # Keep CaP-X's local API traffic away from an SSH-forwarded internet proxy.
+  _capx_no_proxy="${NO_PROXY:-${no_proxy:-}}"
+  for _capx_local_host in 127.0.0.1 localhost; do
+    if [[ ",${_capx_no_proxy}," != *",${_capx_local_host},"* ]]; then
+      _capx_no_proxy="${_capx_no_proxy:+${_capx_no_proxy},}${_capx_local_host}"
+    fi
+  done
+  export NO_PROXY="${_capx_no_proxy}"
+  export no_proxy="${_capx_no_proxy}"
+  unset _capx_no_proxy _capx_local_host
+fi
 
 mkdir -p \
   "${UV_CACHE_DIR}" \

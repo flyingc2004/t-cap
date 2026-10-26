@@ -42,7 +42,11 @@ set -u
 export CUDA_HOME="${CUDA_HOME:-${CONDA_PREFIX}}"
 export PATH="${CUDA_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib:${LD_LIBRARY_PATH:-}"
-echo "[capx-shadow] config=${CONFIG_FILE} root=${UNIVTAC_ROOT} trials=${TRIALS} gpu=${CUDA_VISIBLE_DEVICES:-unset}"
+if [[ -n "${CAPX_EXPECTED_MODEL:-}" && "${CAPX_MODEL:-}" != "${CAPX_EXPECTED_MODEL}" ]]; then
+  echo "[capx-shadow] model override mismatch: expected=${CAPX_EXPECTED_MODEL} actual=${CAPX_MODEL:-unset}" >&2
+  exit 2
+fi
+echo "[capx-shadow] config=${CONFIG_FILE} root=${UNIVTAC_ROOT} trials=${TRIALS} gpu=${CUDA_VISIBLE_DEVICES:-unset} model=${CAPX_MODEL:-unset}"
 cd "${UNIVTAC_ROOT}"
 exec python "${CAPX_DIR}/capx/envs/launch_opentac_shadow.py" \
   --config-path "${CONFIG_FILE}" --total-trials "${TRIALS}" --num-workers "${CAPX_WORKERS:-1}" \
