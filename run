@@ -94,7 +94,7 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # CONFIG_PATH to run a baseline or an archived experiment explicitly.
 CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
 case "$(basename -- "${CONFIG_PATH}")" in
-  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml|play_piano_shadow_digit_visual_force_60hz_smoke.yaml|play_piano_shadow_digit_visual_force_5d_60hz_smoke.yaml|play_piano_shadow_digit_random6_online_skills.yaml|play_piano_shadow_digit_code_memory.yaml|play_piano_shadow_digit_abc_a_fresh.yaml|play_piano_shadow_digit_abc_b_frozen.yaml|play_piano_shadow_digit_abc_c_adaptive.yaml|play_piano_shadow_digit_tactile_skill_pilot.yaml)
+  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml|play_piano_shadow_digit_visual_force_60hz_smoke.yaml|play_piano_shadow_digit_visual_force_5d_60hz_smoke.yaml|play_piano_shadow_digit_random6_online_skills.yaml|play_piano_shadow_digit_code_memory.yaml|play_piano_shadow_digit_abc_a_fresh.yaml|play_piano_shadow_digit_abc_b_frozen.yaml|play_piano_shadow_digit_abc_c_adaptive.yaml|play_piano_shadow_digit_tactile_skill_pilot.yaml|play_piano_shadow_digit_evidence_memory.yaml)
     [[ -n "${GPU_WAS_SET}" ]] || { echo "[run] Shadow piano requires an explicit GPU=<physical-id>" >&2; exit 2; }
     RUN_ROOT="${RUN_ROOT:-/mnt/data/ljz/opentacbench/capx-runs}"
     UNIVTAC_ROOT="${UNIVTAC_ROOT:-$(cd "${ROOT}/../OpenTacBench" && pwd)}"
@@ -180,7 +180,7 @@ echo "[run] server_url=${CAPX_SERVER_URL}, api_key_present=$([[ -n "${CAPX_API_K
 
 if [[ "${LLM_PREFLIGHT}" == "1" ]]; then
   echo "[run] llm preflight begin timeout=${LLM_PREFLIGHT_TIMEOUT_SECONDS}s"
-  "${CAPX_PYTHON}" - <<'PY'
+  "${CAPX_PYTHON}" - "${CAPX_DIR:-${ROOT}/cap-x}" <<'PY'
 import json
 import os
 import sys
@@ -193,11 +193,21 @@ timeout = float(os.environ.get("LLM_PREFLIGHT_TIMEOUT_SECONDS", "20"))
 api_key = os.environ.get("CAPX_API_KEY", "")
 protocol = os.environ.get("CAPX_LLM_PROTOCOL", "chat_completions").strip().lower()
 if protocol == "responses":
+    # Use the same wire format and completed-stream parser as real requests.
+    # A relay can require message lists even for this one-line health check.
+    sys.path.insert(0, sys.argv[1])
+    from capx.llm.client import _codex_responses_payload, _post_json, _responses_output
     payload = {
         "model": model,
-        "input": "Reply with OK.",
-        "max_output_tokens": 8,
+        "input": [{"role": "user", "content": [{"type": "input_text", "text": "Reply with OK."}]}],
+        # Leave room for a small reasoning response as well as visible text.
+        "max_output_tokens": 256,
     }
+    if os.environ.get("CAPX_RESPONSES_SEND_REASONING_EFFORT", "").strip().lower() in {
+        "1", "true", "yes", "y", "on"
+    }:
+        payload["reasoning"] = {"effort": "low"}
+    payload = _codex_responses_payload(payload)
 else:
     payload = {
         "model": model,
@@ -218,16 +228,28 @@ disable_proxy = os.environ.get("CAPX_DISABLE_PROXY", "").strip().lower() in {
     "1", "true", "yes", "y", "on"
 }
 try:
-    with requests.Session() as session:
-        session.trust_env = not disable_proxy
-        response = session.post(
-            url,
-            headers=headers,
-            data=json.dumps(payload),
-            timeout=timeout,
-        )
+    if protocol == "responses":
+        # One request, no retries; honor the shared no-proxy/stream settings.
+        response = _post_json(url, headers=headers, payload=payload, timeout=timeout)
+    else:
+        with requests.Session() as session:
+            session.trust_env = not disable_proxy
+            response = session.post(
+                url,
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=timeout,
+            )
+    if response.status_code >= 400:
+        print(f"[run] llm preflight failed status={response.status_code} preview={response.text[:500]!r}", file=sys.stderr)
+        sys.exit(1)
     text = response.text[:500]
     response.raise_for_status()
+    if protocol == "responses":
+        body = response.json()
+        if body.get("status") not in (None, "completed"):
+            raise RuntimeError(f"Responses preflight did not complete: {body.get('status')}")
+        text, _ = _responses_output(body)
     print(f"[run] llm preflight ok status={response.status_code} preview={text[:160]!r}")
 except requests.HTTPError as exc:
     response = exc.response
