@@ -94,7 +94,7 @@ CAPX_SAM3_CHECKPOINT="${CAPX_SAM3_CHECKPOINT:-${ROOT}/cap-x-cache/modelscope/fac
 # CONFIG_PATH to run a baseline or an archived experiment explicitly.
 CONFIG_PATH="${CONFIG_PATH:-${CAPX_CONFIG_PATH:-env_configs/univtac/tactile_memory_match_response_selection_easy_gt.yaml}}"
 case "$(basename -- "${CONFIG_PATH}")" in
-  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml|play_piano_shadow_digit_visual_force_60hz_smoke.yaml|play_piano_shadow_digit_visual_force_5d_60hz_smoke.yaml|play_piano_shadow_digit_random6_online_skills.yaml|play_piano_shadow_digit_code_memory.yaml|play_piano_shadow_digit_abc_a_fresh.yaml|play_piano_shadow_digit_abc_b_frozen.yaml|play_piano_shadow_digit_abc_c_adaptive.yaml)
+  play_piano_shadow_digit_smoke.yaml|play_piano_shadow_digit_visual_force_smoke.yaml|play_piano_shadow_digit_visual_force_60hz_smoke.yaml|play_piano_shadow_digit_visual_force_5d_60hz_smoke.yaml|play_piano_shadow_digit_random6_online_skills.yaml|play_piano_shadow_digit_code_memory.yaml|play_piano_shadow_digit_abc_a_fresh.yaml|play_piano_shadow_digit_abc_b_frozen.yaml|play_piano_shadow_digit_abc_c_adaptive.yaml|play_piano_shadow_digit_tactile_skill_pilot.yaml)
     [[ -n "${GPU_WAS_SET}" ]] || { echo "[run] Shadow piano requires an explicit GPU=<physical-id>" >&2; exit 2; }
     RUN_ROOT="${RUN_ROOT:-/mnt/data/ljz/opentacbench/capx-runs}"
     UNIVTAC_ROOT="${UNIVTAC_ROOT:-$(cd "${ROOT}/../OpenTacBench" && pwd)}"
