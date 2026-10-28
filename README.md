@@ -8,6 +8,38 @@
 
 钢琴代码使用父仓库记录的 cap-x commit；不要使用下方旧 Cube Stack 流程的 `submodule update --remote` 来选择钢琴版本。以下保留原 Cube Stack 复现说明。
 
+### 当前版本：代码补丁闭环与触觉 key（2026-10-28）
+
+**实现代码补丁闭环框架，正在实验触觉key是否有用。** 本次更新位于t-cap的
+`feat/opentac-piano-tension-integration`，对应cap-x的`feat/capx-piano-tension-integration`。
+精确版本以父仓库提交的子模块指针为准；同步后执行 `git submodule update --init cap-x`。
+
+触觉key用于在公开错误触发代码修复时查找历史执行经验：
+
+| 通路 | 表示 | 当前作用 |
+|---|---|---|
+| 即时 | 5D：深度形变均值＋三个像素比例＋面积变化率 | 保留冻结力估计器和即时触觉检索 |
+| 时序基线 | window4，16帧×4D标准化展开为64D并L2归一化 | 最近0.5秒触觉过程的检索key |
+| 学习型时序 | tactile，32D | 编码连续深度形变与有效掩码 |
+| 触觉＋动作时序 | tactile_action，32D | 额外编码4D动作目标和4D实际手部状态 |
+
+窗口按物理时间构造16个30Hz采样点，不直接截取60Hz观测的最后16条，不跨reset或补造缺失值。
+即时与时序并行，时序不替代5D测力。只在发生公开错误、准备重新生成/修复代码时检索，
+正常执行持续记录。检索按传感器、动作阶段、黑白键/轻重、编码器与预处理版本隔离，
+沿触觉片段→实际函数调用→历史补丁→公开验证结果提供经验；真实力与原生评分仅用于私有审计。
+
+局部修复经验可以被再次检索，整段策略是否允许默认复用则独立审核。目前已跑通历史释放
+补丁的检索、执行和新seed继承，但单次对照存在无历史组补丁格式失败，尚未证明触觉key
+相对无历史或语言检索带来稳定收益。完整设计与代码入口见
+[cap-x README：触觉key与代码补丁闭环](cap-x/README.md)，结果见
+[钢琴实验账本](cap-x/docs/opentac-shadow-piano-experiment-ledger.md)。
+
+继续沿用 `./run_responses`，配置为
+`env_configs/opentac/play_piano_shadow_digit_evidence_memory.yaml`。在新服务器上设置
+`CAPX_SHADOW_TRAJECTORY_RUN`（冻结编码器及归一化目录）、`CAPX_SHADOW_EVIDENCE_ROOT`
+（公共证据库）、`CAPX_SHADOW_PRIVATE_AUDIT_ROOT`（私有审计）以及实际OpenTacBench/Conda路径。
+编码器权重、原始轨迹、运行视频和secrets不会随Git上传，需要独立迁移。
+
 ## 仓库结构
 
 ```text
